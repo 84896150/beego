@@ -98,8 +98,13 @@ func (input *BeegoInput) Site() string {
 
 // Scheme returns the request scheme as "http" or "https".
 func (input *BeegoInput) Scheme() string {
-	if scheme := input.Header("X-Forwarded-Proto"); scheme != "" {
-		return scheme
+	if input.Context != nil && input.Context.IsTrustedProxy() {
+		if scheme := strings.TrimSpace(input.Header("X-Forwarded-Proto")); scheme != "" {
+			if idx := strings.IndexByte(scheme, ','); idx >= 0 {
+				scheme = strings.TrimSpace(scheme[:idx])
+			}
+			return strings.ToLower(scheme)
+		}
 	}
 	if input.Context.Request.URL.Scheme != "" {
 		return input.Context.Request.URL.Scheme
@@ -213,16 +218,12 @@ func (input *BeegoInput) AcceptsYAML() bool {
 }
 
 // IP returns request client ip.
-// if in proxy, return first proxy id.
-// if error, return RemoteAddr.
+// Only trusts forwarding headers when the peer matches TrustedProxies.
 func (input *BeegoInput) IP() string {
-	ips := input.Proxy()
-	if len(ips) > 0 && ips[0] != "" {
-		rip, _, err := net.SplitHostPort(ips[0])
-		if err != nil {
-			rip = ips[0]
+	if input.Context != nil {
+		if ip := input.Context.ClientIP(); ip != "" {
+			return ip
 		}
-		return rip
 	}
 	if ip, _, err := net.SplitHostPort(input.Context.Request.RemoteAddr); err == nil {
 		return ip

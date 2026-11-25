@@ -274,7 +274,8 @@ func (ctx *Context) GetSecureCookie(Secret, key string) (string, bool) {
 		return "", false
 	}
 
-	if fmt.Sprintf("%02x", h.Sum(nil)) != sig {
+	expectedSig := fmt.Sprintf("%02x", h.Sum(nil))
+	if !hmac.Equal([]byte(expectedSig), []byte(sig)) {
 		return "", false
 	}
 	res, _ := base64.URLEncoding.DecodeString(vs)

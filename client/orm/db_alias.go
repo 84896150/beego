@@ -22,6 +22,8 @@ import (
 	"time"
 
 	lru "github.com/hashicorp/golang-lru"
+
+	"github.com/beego/beego/v2/core/dbbridge"
 )
 
 // DriverType database driver constant int.
@@ -366,6 +368,10 @@ func addAliasWthDB(aliasName, driverName string, db *sql.DB, params ...DBOption)
 
 	if !dataBaseCache.add(aliasName, al) {
 		return nil, existErr
+	}
+
+	if aliasName == "default" {
+		dbbridge.RegisterDefault(db, driverName)
 	}
 
 	return al, nil

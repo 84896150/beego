@@ -415,6 +415,53 @@ type SessionConfig struct {
 	// @Description session id's prefix
 	// @Default ""
 	SessionIDPrefix string
+
+	// SessionCookieName
+	// @Description isolated session cookie name; defaults to {appname}_session when empty
+	// @Default ""
+	SessionCookieName string
+	// SessionTableName
+	// @Description persistent SQL table name used by identity session engine
+	// @Default beego_session
+	SessionTableName string
+	// SessionTTL
+	// @Description identity session lifetime in seconds
+	// @Default 86400
+	SessionTTL int64
+	// SessionAutoRefresh
+	// @Description whether active requests automatically extend session & cookie expiration
+	// @Default true
+	SessionAutoRefresh bool
+	// SessionMaxDevices
+	// @Description max concurrent devices per user (1 = single-device kick, N = max N devices, 0 = unlimited)
+	// @Default 1
+	SessionMaxDevices int
+
+	// LoginRateLimitOn
+	// @Description enables built-in anti-brute-force login rate limiter (auto-bypassed in test mode)
+	// @Default true
+	LoginRateLimitOn bool
+	// LoginWindowSec
+	// @Description failure counting window in seconds
+	// @Default 300
+	LoginWindowSec int
+	// LoginMaxFails
+	// @Description max consecutive login failures per IP+account within window
+	// @Default 5
+	LoginMaxFails int
+	// LoginIpMaxFails
+	// @Description max cumulative login failures per IP across all accounts within window
+	// @Default 30
+	LoginIpMaxFails int
+	// LoginLockSec
+	// @Description lockout duration in seconds after exceeding threshold
+	// @Default 900
+	LoginLockSec int
+
+	// TrustedProxies
+	// @Description trusted reverse proxy peers ("loopback,private", "*", "none", or comma-separated IP/CIDR)
+	// @Default loopback,private
+	TrustedProxies string
 }
 
 // LogConfig holds Log related config
@@ -592,7 +639,18 @@ func newBConfig() *Config {
 				SessionEnableSidInHTTPHeader: false, // enable store/get the sessionId into/from http headers
 				SessionNameInHTTPHeader:      "Beegosessionid",
 				SessionEnableSidInURLQuery:   false, // enable get the sessionId from Url Query params
-				SessionCookieSameSite:        http.SameSiteDefaultMode,
+				SessionCookieSameSite:        http.SameSiteLaxMode,
+				SessionCookieName:            "",
+				SessionTableName:             "beego_session",
+				SessionTTL:                   86400,
+				SessionAutoRefresh:           true,
+				SessionMaxDevices:            1,
+				LoginRateLimitOn:             true,
+				LoginWindowSec:               300,
+				LoginMaxFails:                5,
+				LoginIpMaxFails:              30,
+				LoginLockSec:                 900,
+				TrustedProxies:               "loopback,private",
 			},
 		},
 		Log: LogConfig{
@@ -640,6 +698,7 @@ func assignConfig(ac config.Configer) error {
 		}
 	}
 	logs.SetLogFuncCall(BConfig.Log.FileLineNum)
+	context.SetTrustedProxies(BConfig.WebConfig.Session.TrustedProxies)
 	return nil
 }
 

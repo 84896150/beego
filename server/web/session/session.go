@@ -259,6 +259,7 @@ func (manager *Manager) SessionDestroy(w http.ResponseWriter, r *http.Request) {
 			HttpOnly: !manager.config.DisableHTTPOnly,
 			Expires:  expiration,
 			MaxAge:   -1,
+			Secure:   manager.isSecure(r),
 			Domain:   manager.config.Domain,
 			SameSite: manager.config.CookieSameSite,
 		}

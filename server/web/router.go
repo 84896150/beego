@@ -938,17 +938,13 @@ func (p *ControllerRegister) serveHttp(ctx *beecontext.Context) {
 	var err error
 	startTime := time.Now()
 	r := ctx.Request
-	rw := ctx.ResponseWriter.ResponseWriter
 	var (
-		runRouter        reflect.Type
-		findRouter       bool
-		runMethod        string
-		methodParams     []*param.MethodParam
-		routerInfo       *ControllerInfo
-		isRunnable       bool
-		currentSessionOn bool
-		originRouterInfo *ControllerInfo
-		originFindRouter bool
+		runRouter    reflect.Type
+		findRouter   bool
+		runMethod    string
+		methodParams []*param.MethodParam
+		routerInfo   *ControllerInfo
+		isRunnable   bool
 	)
 
 	if p.cfg.RecoverFunc != nil {
@@ -1027,25 +1023,6 @@ func (p *ControllerRegister) serveHttp(ctx *beecontext.Context) {
 		}
 	}
 
-	// session init
-	currentSessionOn = p.cfg.WebConfig.Session.SessionOn
-	originRouterInfo, originFindRouter = p.FindRouter(ctx)
-	if originFindRouter {
-		currentSessionOn = originRouterInfo.sessionOn
-	}
-	if currentSessionOn {
-		ctx.Input.CruSession, err = GlobalSessions.SessionStart(rw, r)
-		if err != nil {
-			logs.Error(err)
-			exception("503", ctx)
-			goto Admin
-		}
-		defer func() {
-			if ctx.Input.CruSession != nil {
-				ctx.Input.CruSession.SessionRelease(r.Context(), rw)
-			}
-		}()
-	}
 	if len(p.filters[BeforeRouter]) > 0 && p.execFilter(ctx, urlPath, BeforeRouter) {
 		goto Admin
 	}

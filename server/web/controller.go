@@ -16,7 +16,6 @@ package web
 
 import (
 	"bytes"
-	context2 "context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -29,12 +28,12 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
 	"github.com/beego/beego/v2/server/web/context"
 	"github.com/beego/beego/v2/server/web/context/param"
-	"github.com/beego/beego/v2/server/web/session"
 )
 
 var (
@@ -128,9 +127,6 @@ type Controller struct {
 	EnableXSRF bool
 	_xsrfToken string
 	XSRFExpire int
-
-	// session
-	CruSession session.Store
 }
 
 // ControllerInterface is an interface to uniform all controller handler.
@@ -707,59 +703,80 @@ func (c *Controller) SaveToFileWithBuffer(fromFile string, toFile string, buf []
 	return err
 }
 
-// StartSession starts session and load old session data info this controller.
-func (c *Controller) StartSession() session.Store {
-	if c.CruSession == nil {
-		c.CruSession = c.Ctx.Input.CruSession
+// ClientIP 安全获取客户端真实 IP（遵循 TrustedProxies 可信反向代理边界）
+func (c *Controller) ClientIP() string {
+	if c == nil || c.Ctx == nil {
+		return ""
 	}
-	return c.CruSession
+	return c.Ctx.ClientIP()
 }
 
-// SetSession puts value into session.
-func (c *Controller) SetSession(name interface{}, value interface{}) error {
-	if c.CruSession == nil {
-		c.StartSession()
+// GetSessionToken 提取当前请求携带的项目专属会话 Cookie 令牌（仅读取 HttpOnly Cookie）
+func (c *Controller) GetSessionToken() string {
+	if c == nil || c.Ctx == nil {
+		return ""
 	}
-	return c.CruSession.Set(context2.Background(), name, value)
+	return extractRequestSessionToken(c.Ctx)
 }
 
-// GetSession gets value from session.
-func (c *Controller) GetSession(name interface{}) interface{} {
-	if c.CruSession == nil {
-		c.StartSession()
+// SetSessionCookie 下发项目专属安全 HttpOnly 会话 Cookie
+func (c *Controller) SetSessionCookie(token string, maxAgeSec ...int) {
+	if c == nil || c.Ctx == nil {
+		return
 	}
-	return c.CruSession.Get(context2.Background(), name)
+	ttl := int(ResolveSessionTTLSeconds())
+	if len(maxAgeSec) > 0 && maxAgeSec[0] > 0 {
+		ttl = maxAgeSec[0]
+	}
+	c.Ctx.SetHttpOnlyCookie(ResolveSessionCookieName(), token, ttl)
 }
 
-// DelSession removes value from session.
-func (c *Controller) DelSession(name interface{}) error {
-	if c.CruSession == nil {
-		c.StartSession()
+// ClearSessionCookie 清除浏览器中的项目专属安全 HttpOnly 会话 Cookie
+func (c *Controller) ClearSessionCookie() {
+	if c == nil || c.Ctx == nil {
+		return
 	}
-	return c.CruSession.Delete(context2.Background(), name)
+	c.Ctx.ClearHttpOnlyCookie(ResolveSessionCookieName())
 }
 
-// SessionRegenerateID regenerates session id for this session.
-// the session data have no changes.
-func (c *Controller) SessionRegenerateID() error {
-	if c.CruSession != nil {
-		c.CruSession.SessionRelease(context2.Background(), c.Ctx.ResponseWriter)
+// LoginSession 创建绑定用户 UID 的身份会话（内置单设备互踢 / N 设备限额控制、隔离 Cookie 下发及失败计数自动清零）
+func (c *Controller) LoginSession(uid int64, data map[string]any) (*UserSession, error) {
+	var ctx *context.Context
+	if c != nil {
+		ctx = c.Ctx
 	}
-	var err error
-	c.CruSession, err = GlobalSessions.SessionRegenerateID(c.Ctx.ResponseWriter, c.Ctx.Request)
-	c.Ctx.Input.CruSession = c.CruSession
-	return err
+	return getIdentitySessionEngine().Login(ctx, uid, data)
 }
 
-// DestroySession cleans session data and session cookie.
-func (c *Controller) DestroySession() error {
-	err := c.Ctx.Input.CruSession.Flush(nil)
-	if err != nil {
-		return err
+// VerifySession 核验当前请求的身份会话状态（精准区分有效 / 未登录 / 已过期 / 被顶号互踢，并按需自动续期）
+func (c *Controller) VerifySession() (*UserSession, SessionStatus) {
+	if c == nil || c.Ctx == nil {
+		return nil, SessionMissing
 	}
-	c.Ctx.Input.CruSession = nil
-	GlobalSessions.SessionDestroy(c.Ctx.ResponseWriter, c.Ctx.Request)
-	return nil
+	return getIdentitySessionEngine().Verify(c.Ctx)
+}
+
+// LogoutSession 退出当前设备的登录会话并清理浏览器 Cookie
+func (c *Controller) LogoutSession() {
+	if c == nil || c.Ctx == nil {
+		return
+	}
+	getIdentitySessionEngine().Logout(c.Ctx)
+}
+
+// CheckLoginLimit 检查当前客户端 IP（及可选登录账号）是否处于防爆破封禁期
+func (c *Controller) CheckLoginLimit(username ...string) (bool, time.Duration) {
+	return CheckLoginRateLimit(c.ClientIP(), username...)
+}
+
+// RecordLoginFail 记录一次当前客户端 IP（及可选登录账号）的登录验证失败
+func (c *Controller) RecordLoginFail(username ...string) {
+	RecordLoginFail(c.ClientIP(), username...)
+}
+
+// ClearLoginFail 清除当前客户端 IP（及可选登录账号）的登录失败计数
+func (c *Controller) ClearLoginFail(username ...string) {
+	ClearLoginFail(c.ClientIP(), username...)
 }
 
 // IsAjax returns this request is ajax or not.

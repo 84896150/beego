@@ -98,18 +98,17 @@ func (pder *MemProvider) SessionInit(ctx context.Context, maxlifetime int64, sav
 
 // SessionRead get memory session store by sid
 func (pder *MemProvider) SessionRead(ctx context.Context, sid string) (Store, error) {
-	pder.lock.RLock()
-	if element, ok := pder.sessions[sid]; ok {
-		go pder.SessionUpdate(nil, sid)
-		pder.lock.RUnlock()
-		return element.Value.(*MemSessionStore), nil
-	}
-	pder.lock.RUnlock()
 	pder.lock.Lock()
+	defer pder.lock.Unlock()
+	if element, ok := pder.sessions[sid]; ok {
+		sess := element.Value.(*MemSessionStore)
+		sess.timeAccessed = time.Now()
+		pder.list.MoveToFront(element)
+		return sess, nil
+	}
 	newsess := &MemSessionStore{sid: sid, timeAccessed: time.Now(), value: make(map[interface{}]interface{})}
 	element := pder.list.PushFront(newsess)
 	pder.sessions[sid] = element
-	pder.lock.Unlock()
 	return newsess, nil
 }
 
@@ -159,28 +158,27 @@ func (pder *MemProvider) SessionDestroy(ctx context.Context, sid string) error {
 
 // SessionGC clean expired session stores in memory session
 func (pder *MemProvider) SessionGC(context.Context) {
-	pder.lock.RLock()
+	pder.lock.Lock()
+	defer pder.lock.Unlock()
+	now := time.Now().Unix()
 	for {
 		element := pder.list.Back()
 		if element == nil {
 			break
 		}
-		if (element.Value.(*MemSessionStore).timeAccessed.Unix() + pder.maxlifetime) < time.Now().Unix() {
-			pder.lock.RUnlock()
-			pder.lock.Lock()
+		if (element.Value.(*MemSessionStore).timeAccessed.Unix() + pder.maxlifetime) < now {
 			pder.list.Remove(element)
 			delete(pder.sessions, element.Value.(*MemSessionStore).sid)
-			pder.lock.Unlock()
-			pder.lock.RLock()
 		} else {
 			break
 		}
 	}
-	pder.lock.RUnlock()
 }
 
 // SessionAll get count number of memory session
 func (pder *MemProvider) SessionAll(context.Context) int {
+	pder.lock.RLock()
+	defer pder.lock.RUnlock()
 	return pder.list.Len()
 }
 

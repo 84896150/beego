@@ -753,16 +753,28 @@ func TestRouterSessionSet(t *testing.T) {
 		t.Errorf("TestRotuerSessionSet failed")
 	}
 
-	// global sessionOn = true, router sessionOn = true
+	// global sessionOn = true: anonymous requests must NOT auto-spawn session cookies;
+	// only explicit LoginSession issues an HttpOnly session cookie.
 	r, _ = http.NewRequest("GET", "/user", nil)
 	w = httptest.NewRecorder()
 	handler = NewControllerRegister()
 	handler.Add("/user", &TestController{}, WithRouterMethods(&TestController{}, "get:Get"),
 		WithRouterSessionOn(true))
 	handler.ServeHTTP(w, r)
-	if w.Header().Get("Set-Cookie") == "" {
-		t.Errorf("TestRotuerSessionSet failed")
+	if w.Header().Get("Set-Cookie") != "" {
+		t.Errorf("anonymous request should not set session cookie automatically")
 	}
+
+	r, _ = http.NewRequest("POST", "/login", nil)
+	w = httptest.NewRecorder()
+	handler.Post("/login", func(ctx *context.Context) {
+		_, _ = getIdentitySessionEngine().Login(ctx, 1, map[string]any{"role": "admin"})
+	})
+	handler.ServeHTTP(w, r)
+	if w.Header().Get("Set-Cookie") == "" {
+		t.Errorf("LoginSession should set session cookie")
+	}
+	ResetSessions()
 }
 
 func TestRouterCtrlGet(t *testing.T) {

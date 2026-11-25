@@ -16,7 +16,6 @@ package mock
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"net/http"
 	"testing"
@@ -51,16 +50,19 @@ func (c *TestController) HelloWorld() {
 }
 
 func (c *TestController) HelloSession() {
-	err := c.SessionRegenerateID()
+	_, err := c.LoginSession(1001, map[string]any{"name": "Tom"})
 	if err != nil {
 		c.Ctx.WriteString("error")
 		return
 	}
-	_ = c.SetSession("name", "Tom")
 	c.Ctx.WriteString("set")
 }
 
 func (c *TestController) HelloSessionName() {
-	name := c.CruSession.Get(context.Background(), "name")
-	c.Ctx.WriteString(name.(string))
+	sess, status := c.VerifySession()
+	if status != web.SessionValid || sess == nil {
+		c.Ctx.WriteString("unauthorized")
+		return
+	}
+	c.Ctx.WriteString(sess.GetString("name"))
 }
