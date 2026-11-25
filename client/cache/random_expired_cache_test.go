@@ -17,7 +17,7 @@ package cache
 import (
 	"context"
 	"fmt"
-	"math/rand"
+	"math/rand/v2"
 	"strings"
 	"testing"
 	"time"
@@ -112,7 +112,7 @@ func ExampleNewRandomExpireCache() {
 	c = NewRandomExpireCache(mc,
 		// based on the expiration
 		WithRandomExpireOffsetFunc(func() time.Duration {
-			val := rand.Int31n(100)
+			val := rand.Int32N(100)
 			fmt.Printf("calculate offset")
 			return time.Duration(val) * time.Second
 		}))

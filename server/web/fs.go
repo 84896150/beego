@@ -16,11 +16,13 @@ func (d FileSystem) Open(name string) (http.File, error) {
 // directory in the tree, including root. All errors that arise visiting files
 // and directories are filtered by walkFn.
 func Walk(fs http.FileSystem, root string, walkFn filepath.WalkFunc) error {
+	root = filepath.ToSlash(root)
 	f, err := fs.Open(root)
 	if err != nil {
 		return err
 	}
 	info, err := f.Stat()
+	_ = f.Close()
 	if err != nil {
 		err = walkFn(root, nil, err)
 	} else {
@@ -39,16 +41,17 @@ func walk(fs http.FileSystem, path string, info os.FileInfo, walkFn filepath.Wal
 		return walkFn(path, info, nil)
 	}
 
-	dir, err := fs.Open(path)
+	slashPath := filepath.ToSlash(path)
+	dir, err := fs.Open(slashPath)
 	if err != nil {
-		if err1 := walkFn(path, info, err); err1 != nil {
+		if err1 := walkFn(slashPath, info, err); err1 != nil {
 			return err1
 		}
 		return err
 	}
 	defer dir.Close()
 	dirs, err := dir.Readdir(-1)
-	err1 := walkFn(path, info, err)
+	err1 := walkFn(slashPath, info, err)
 	// If err != nil, walk can't walk into this directory.
 	// err1 != nil means walkFn want walk to skip this directory or stop walking.
 	// Therefore, if one of err and err1 isn't nil, walk will return.
@@ -61,7 +64,7 @@ func walk(fs http.FileSystem, path string, info os.FileInfo, walkFn filepath.Wal
 	}
 
 	for _, fileInfo := range dirs {
-		filename := filepath.Join(path, fileInfo.Name())
+		filename := filepath.ToSlash(filepath.Join(slashPath, fileInfo.Name()))
 		if err = walk(fs, filename, fileInfo, walkFn); err != nil {
 			if !fileInfo.IsDir() || err != filepath.SkipDir {
 				return err

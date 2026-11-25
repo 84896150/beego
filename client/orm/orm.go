@@ -72,6 +72,14 @@ const (
 	DebugQueries = iota
 )
 
+type ormSentinelError struct {
+	msg    string
+	target error
+}
+
+func (e ormSentinelError) Error() string { return e.msg }
+func (e ormSentinelError) Unwrap() error { return e.target }
+
 // Define common vars
 var (
 	Debug            = false
@@ -79,12 +87,12 @@ var (
 	DefaultRowsLimit = -1
 	DefaultRelsDepth = 2
 	DefaultTimeLoc   = iutils.DefaultTimeLoc
-	ErrTxDone        = errors.New("<TxOrmer.Commit/Rollback> transaction already done")
-	ErrMultiRows     = errors.New("<QuerySeter> return multi rows")
-	ErrNoRows        = errors.New("<QuerySeter> no row found")
-	ErrStmtClosed    = errors.New("<QuerySeter> stmt already closed")
-	ErrArgs          = errors.New("<Ormer> args error may be empty")
-	ErrNotImplement  = errors.New("have not implement")
+	ErrTxDone        error = ormSentinelError{msg: "<TxOrmer.Commit/Rollback> transaction already done", target: sql.ErrTxDone}
+	ErrMultiRows           = errors.New("<QuerySeter> return multi rows")
+	ErrNoRows        error = ormSentinelError{msg: "<QuerySeter> no row found", target: sql.ErrNoRows}
+	ErrStmtClosed          = errors.New("<QuerySeter> stmt already closed")
+	ErrArgs                = errors.New("<Ormer> args error may be empty")
+	ErrNotImplement        = errors.New("have not implement")
 
 	ErrLastInsertIdUnavailable = errors.New("<Ormer> last insert id is unavailable")
 )

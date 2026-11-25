@@ -16,6 +16,7 @@ package orm
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -160,6 +161,8 @@ func TestGetByID(t *testing.T) {
 
 	_, err = GetByIDWithCtx[genericArticle](context.Background(), o, id+999)
 	assert.ErrorIs(t, err, ErrNoRows)
+	assert.ErrorIs(t, err, sql.ErrNoRows)
+	assert.True(t, err == ErrNoRows)
 }
 
 func TestTypedQuery_RejectsPointerTypeParam(t *testing.T) {

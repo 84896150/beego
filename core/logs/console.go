@@ -19,8 +19,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-
-	"github.com/shiena/ansicolor"
 )
 
 // brush is a color join function
@@ -75,7 +73,7 @@ func NewConsole() Logger {
 
 func newConsole() *consoleWriter {
 	cw := &consoleWriter{
-		lg:       newLogWriter(ansicolor.NewAnsiColorWriter(os.Stdout)),
+		lg:       newLogWriter(os.Stdout),
 		Level:    LevelDebug,
 		Colorful: true,
 	}

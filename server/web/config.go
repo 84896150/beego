@@ -23,6 +23,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/beego/beego/v2"
 	"github.com/beego/beego/v2/core/config"
@@ -133,9 +134,13 @@ type Config struct {
 // Listen holds for http and https related config
 type Listen struct {
 	// Graceful
-	// @Description means use graceful module to start the server
+	// @Description enables cross-platform graceful shutdown via http.Server.Shutdown
 	// @Default false
 	Graceful bool
+	// GracefulTimeout
+	// @Description maximum wait duration for in-flight requests during graceful shutdown
+	// @Default 30s
+	GracefulTimeout time.Duration
 	// ListenTCP4
 	// @Description if it's true, means that Beego only work for TCP4
 	// please check net.Listen function
@@ -535,8 +540,9 @@ func newBConfig() *Config {
 		EnableErrorsShow:   true,
 		EnableErrorsRender: false,
 		Listen: Listen{
-			Graceful:      false,
-			ServerTimeOut: 0,
+			Graceful:        false,
+			GracefulTimeout: 30 * time.Second,
+			ServerTimeOut:   0,
 			ListenTCP4:    false,
 			EnableHTTP:    true,
 			AutoTLS:       false,

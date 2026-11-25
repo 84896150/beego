@@ -17,8 +17,7 @@ package mock
 import (
 	"context"
 	"net/http"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/beego/beego/v2/server/web"
 	"github.com/beego/beego/v2/server/web/session"
@@ -122,7 +121,7 @@ func (s *SessionStore) Flush(ctx context.Context) error {
 
 func newSessionStore() *SessionStore {
 	return &SessionStore{
-		sid:    uuid.New().String(),
+		sid:    uuid.NewV7().String(),
 		values: make(map[interface{}]interface{}, 4),
 	}
 }

@@ -14,9 +14,21 @@
 
 package buffers
 
-import "github.com/valyala/bytebufferpool"
+import (
+	"bytes"
+	"sync"
+)
 
-var _ Buffer = &bytebufferpool.ByteBuffer{}
+const maxPooledBufferCap = 64 << 10
+
+var (
+	_          Buffer = (*bytes.Buffer)(nil)
+	bufferPool        = sync.Pool{
+		New: func() any {
+			return new(bytes.Buffer)
+		},
+	}
+)
 
 type Buffer interface {
 	Write(p []byte) (int, error)
@@ -26,9 +38,22 @@ type Buffer interface {
 }
 
 func Get() Buffer {
-	return bytebufferpool.Get()
+	buf := bufferPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	return buf
 }
 
 func Put(bf Buffer) {
-	bytebufferpool.Put(bf.(*bytebufferpool.ByteBuffer))
+	if bf == nil {
+		return
+	}
+	buf, ok := bf.(*bytes.Buffer)
+	if !ok {
+		return
+	}
+	if buf.Cap() > maxPooledBufferCap {
+		return
+	}
+	buf.Reset()
+	bufferPool.Put(buf)
 }

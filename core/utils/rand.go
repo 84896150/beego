@@ -15,30 +15,56 @@
 package utils
 
 import (
+	"bytes"
 	"crypto/rand"
-	r "math/rand"
-	"time"
 )
 
 var alphaNum = []byte(`0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz`)
 
-// RandomCreateBytes generate random []byte by specify chars.
+// RandomCreateBytes generate random []byte by specify chars using unbiased crypto/rand rejection sampling.
 func RandomCreateBytes(n int, alphabets ...byte) []byte {
+	if n <= 0 {
+		return []byte{}
+	}
 	if len(alphabets) == 0 {
 		alphabets = alphaNum
 	}
-	bytes := make([]byte, n)
-	var randBy bool
-	if num, err := rand.Read(bytes); num != n || err != nil {
-		r.Seed(time.Now().UnixNano())
-		randBy = true
+	m := len(alphabets)
+	if m == 1 {
+		return bytes.Repeat(alphabets, n)
 	}
-	for i, b := range bytes {
-		if randBy {
-			bytes[i] = alphabets[r.Intn(len(alphabets))]
-		} else {
-			bytes[i] = alphabets[b%byte(len(alphabets))]
+
+	result := make([]byte, 0, n)
+	if m >= 256 {
+		buf := make([]byte, n)
+		if _, err := rand.Read(buf); err != nil {
+			panic(fmtErrorRand(err))
+		}
+		for _, b := range buf {
+			result = append(result, alphabets[int(b)%m])
+		}
+		return result
+	}
+
+	maxValid := 256 - (256 % m)
+	buf := make([]byte, n*2)
+	for len(result) < n {
+		if _, err := rand.Read(buf); err != nil {
+			panic(fmtErrorRand(err))
+		}
+		for _, b := range buf {
+			if int(b) >= maxValid {
+				continue
+			}
+			result = append(result, alphabets[int(b)%m])
+			if len(result) == n {
+				return result
+			}
 		}
 	}
-	return bytes
+	return result
+}
+
+func fmtErrorRand(err error) string {
+	return "core/utils: crypto/rand failed: " + err.Error()
 }

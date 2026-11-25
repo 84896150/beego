@@ -16,12 +16,11 @@ package web
 
 import (
 	"bytes"
-	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
-	assetfs "github.com/elazarl/go-bindata-assetfs"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/beego/beego/v2/test"
@@ -276,14 +275,6 @@ func TestTemplateLayout(t *testing.T) {
 	os.RemoveAll(dir)
 }
 
-type TestingFileSystem struct {
-	assetfs *assetfs.AssetFS
-}
-
-func (d TestingFileSystem) Open(name string) (http.File, error) {
-	return d.assetfs.Open(name)
-}
-
 var outputBinData = `<!DOCTYPE html>
 <html>
   <head>
@@ -299,6 +290,7 @@ var outputBinData = `<!DOCTYPE html>
 
 	
 
+
 	<h2>Hello</h2>
 	<p> This is SomeVar: val</p>
   </body>
@@ -306,9 +298,13 @@ var outputBinData = `<!DOCTYPE html>
 `
 
 func TestFsBinData(t *testing.T) {
-	SetTemplateFSFunc(func() http.FileSystem {
-		return TestingFileSystem{&assetfs.AssetFS{Asset: test.Asset, AssetDir: test.AssetDir, AssetInfo: test.AssetInfo}}
-	})
+	prevViewsPath := BConfig.WebConfig.ViewsPath
+	defer func() {
+		SetTemplateFSFunc(defaultFSFunc)
+		BConfig.WebConfig.ViewsPath = prevViewsPath
+	}()
+
+	SetViewsFS(test.Assets, "views")
 	dir := "views"
 	if err := AddViewPath("views"); err != nil {
 		t.Fatal(err)
@@ -325,8 +321,6 @@ func TestFsBinData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if out.String() != outputBinData {
-		t.Log(out.String())
-		t.Fatal("Compare failed")
-	}
+	normalized := strings.ReplaceAll(out.String(), "\r\n", "\n")
+	assert.Equal(t, outputBinData, normalized)
 }

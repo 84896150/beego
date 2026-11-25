@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -183,8 +184,9 @@ func lockViewPaths() {
 // it makes beego can render any template file in view directory.
 func BuildTemplate(dir string, files ...string) error {
 	var err error
-	fs := beeTemplateFS()
-	f, err := fs.Open(dir)
+	slashDir := filepath.ToSlash(dir)
+	fsys := beeTemplateFS()
+	f, err := fsys.Open(slashDir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -201,7 +203,7 @@ func BuildTemplate(dir string, files ...string) error {
 		root:  dir,
 		files: make(map[string][]string),
 	}
-	err = Walk(fs, dir, self.visit)
+	err = Walk(fsys, slashDir, self.visit)
 	if err != nil {
 		fmt.Printf("Walk() returned %v\n", err)
 		return err
@@ -214,11 +216,11 @@ func BuildTemplate(dir string, files ...string) error {
 				ext := filepath.Ext(file)
 				var t *template.Template
 				if len(ext) == 0 {
-					t, err = getTemplate(self.root, fs, file, v...)
+					t, err = getTemplate(self.root, fsys, file, v...)
 				} else if fn, ok := beeTemplateEngines[ext[1:]]; ok {
 					t, err = fn(self.root, file, beegoTplFuncMap)
 				} else {
-					t, err = getTemplate(self.root, fs, file, v...)
+					t, err = getTemplate(self.root, fsys, file, v...)
 				}
 				if err != nil {
 					logs.Error("parse template err:", file, err)
@@ -244,7 +246,7 @@ func getTplDeep(root string, fs http.FileSystem, file string, parent string, t *
 		rParent = file
 		fileAbsPath = filepath.Join(root, file)
 	}
-	f, err := fs.Open(fileAbsPath)
+	f, err := fs.Open(filepath.ToSlash(fileAbsPath))
 	if err != nil {
 		panic("can't find template file:" + file)
 	}
@@ -316,10 +318,9 @@ func _getTemplate(t0 *template.Template, root string, fs http.FileSystem, subMod
 			// second check define
 			for _, otherFile := range others {
 				var data []byte
-				fileAbsPath := filepath.Join(root, otherFile)
+				fileAbsPath := filepath.ToSlash(filepath.Join(root, otherFile))
 				f, err := fs.Open(fileAbsPath)
 				if err != nil {
-					f.Close()
 					logs.Trace("template file parse error, not success open file:", err)
 					continue
 				}
@@ -367,6 +368,25 @@ func SetTemplateFSFunc(fnt templateFSFunc) {
 func SetViewsPath(path string) *HttpServer {
 	BConfig.WebConfig.ViewsPath = path
 	return BeeApp
+}
+
+// SetViewsFS configures an io/fs.FS (e.g. embed.FS) as the view template source.
+func SetViewsFS(fsys fs.FS, viewsPath ...string) *HttpServer {
+	return BeeApp.SetViewsFS(fsys, viewsPath...)
+}
+
+// SetViewsFS configures an io/fs.FS (e.g. embed.FS) as the view template source.
+func (app *HttpServer) SetViewsFS(fsys fs.FS, viewsPath ...string) *HttpServer {
+	if fsys != nil {
+		SetTemplateFSFunc(func() http.FileSystem {
+			return http.FS(fsys)
+		})
+	}
+	if len(viewsPath) > 0 && viewsPath[0] != "" {
+		app.Cfg.WebConfig.ViewsPath = viewsPath[0]
+		BConfig.WebConfig.ViewsPath = viewsPath[0]
+	}
+	return app
 }
 
 // SetStaticPath sets static directory path and proper url pattern in beego application.

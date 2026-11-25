@@ -16,7 +16,7 @@ package cache
 
 import (
 	"context"
-	"math/rand"
+	"math/rand/v2"
 	"sync/atomic"
 	"time"
 )
@@ -65,7 +65,7 @@ func defaultExpiredFunc() func() time.Duration {
 	}
 	// shuffle values
 	for i := range randTimes {
-		n := rand.Intn(size)
+		n := rand.IntN(size)
 		randTimes[i], randTimes[n] = randTimes[n], randTimes[i]
 	}
 	var i uint64

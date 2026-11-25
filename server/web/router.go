@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"uuid"
 
 	"github.com/beego/beego/v2/core/logs"
 	beecontext "github.com/beego/beego/v2/server/web/context"
@@ -952,6 +953,16 @@ func (p *ControllerRegister) serveHttp(ctx *beecontext.Context) {
 
 	if p.cfg.RecoverFunc != nil {
 		defer p.cfg.RecoverFunc(ctx, p.cfg)
+	}
+
+	reqID := ctx.Input.Header("X-Request-Id")
+	if reqID == "" {
+		reqID = uuid.NewV7().String()
+	}
+	ctx.Input.SetData("request_id", reqID)
+	ctx.Output.Header("X-Request-Id", reqID)
+	if ctx.Request != nil {
+		ctx.Request = ctx.Request.WithContext(logs.WithRequestID(ctx.Request.Context(), reqID))
 	}
 
 	ctx.Output.EnableGzip = p.cfg.EnableGzip

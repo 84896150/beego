@@ -4,8 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/beego/beego/v2/server/web"
 	webContext "github.com/beego/beego/v2/server/web/context"
@@ -23,7 +22,7 @@ func testRequest(t *testing.T, handler *web.ControllerRegister, path string, met
 }
 
 func TestSession(t *testing.T) {
-	storeKey := uuid.New().String()
+	storeKey := uuid.NewV7().String()
 	handler := web.NewControllerRegister()
 	handler.InsertFilterChain(
 		"*",

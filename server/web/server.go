@@ -15,16 +15,20 @@
 package web
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/http/fcgi"
 	"os"
+	"os/signal"
 	"path"
 	"strconv"
 	"strings"
+	"syscall"
 	"text/template"
 	"time"
 
@@ -33,7 +37,6 @@ import (
 	"github.com/beego/beego/v2/core/logs"
 	"github.com/beego/beego/v2/core/utils"
 	beecontext "github.com/beego/beego/v2/server/web/context"
-	"github.com/beego/beego/v2/server/web/grace"
 )
 
 // BeeApp is an application instance
@@ -153,87 +156,10 @@ func (app *HttpServer) Run(addr string, mws ...MiddleWare) {
 
 	// run graceful mode
 	if app.Cfg.Listen.Graceful {
-		var opts []grace.ServerOption
-		for _, lifeCycleCallback := range app.LifeCycleCallbacks {
-			lifeCycleCallbackDup := lifeCycleCallback
-			opts = append(opts, grace.WithShutdownCallback(func() {
-				lifeCycleCallbackDup.BeforeShutdown(app)
-			}))
-		}
-
-		httpsAddr := app.Cfg.Listen.HTTPSAddr
-		app.Server.Addr = httpsAddr
-		if app.Cfg.Listen.EnableHTTPS || app.Cfg.Listen.EnableMutualHTTPS {
-			go func() {
-				time.Sleep(1000 * time.Microsecond)
-				if app.Cfg.Listen.HTTPSPort != 0 {
-					httpsAddr = fmt.Sprintf("%s:%d", app.Cfg.Listen.HTTPSAddr, app.Cfg.Listen.HTTPSPort)
-					app.Server.Addr = httpsAddr
-				}
-				server := grace.NewServer(httpsAddr, app.Server.Handler, opts...)
-				server.Server.ReadTimeout = app.Server.ReadTimeout
-				server.Server.WriteTimeout = app.Server.WriteTimeout
-				var ln net.Listener
-				if app.Cfg.Listen.EnableMutualHTTPS {
-					if ln, err = server.ListenMutualTLS(app.Cfg.Listen.HTTPSCertFile,
-						app.Cfg.Listen.HTTPSKeyFile,
-						app.Cfg.Listen.TrustCaFile); err != nil {
-						logs.Critical("ListenMutualTLS: ", err, fmt.Sprintf("%d", os.Getpid()))
-						return
-					}
-				} else {
-					if app.Cfg.Listen.AutoTLS {
-						m := autocert.Manager{
-							Prompt:     autocert.AcceptTOS,
-							HostPolicy: autocert.HostWhitelist(app.Cfg.Listen.Domains...),
-							Cache:      autocert.DirCache(app.Cfg.Listen.TLSCacheDir),
-						}
-						app.Server.TLSConfig = &tls.Config{GetCertificate: m.GetCertificate}
-						app.Cfg.Listen.HTTPSCertFile, app.Cfg.Listen.HTTPSKeyFile = "", ""
-					}
-					if ln, err = server.ListenTLS(app.Cfg.Listen.HTTPSCertFile, app.Cfg.Listen.HTTPSKeyFile); err != nil {
-						logs.Critical("ListenTLS: ", err, fmt.Sprintf("%d", os.Getpid()))
-						return
-					}
-				}
-				for _, callback := range app.LifeCycleCallbacks {
-					callback.AfterStart(app)
-				}
-				if err = server.ServeTLS(ln); err != nil {
-					logs.Critical("ServeTLS: ", err, fmt.Sprintf("%d", os.Getpid()))
-					time.Sleep(100 * time.Microsecond)
-				}
-				endRunning <- true
-			}()
-		}
-		if app.Cfg.Listen.EnableHTTP {
-			go func() {
-				server := grace.NewServer(addr, app.Server.Handler, opts...)
-				server.Server.ReadTimeout = app.Server.ReadTimeout
-				server.Server.WriteTimeout = app.Server.WriteTimeout
-				if app.Cfg.Listen.ListenTCP4 {
-					server.Network = "tcp4"
-				}
-				ln, err := net.Listen(server.Network, server.Addr)
-				logs.Info("graceful http server Running on http://%s", server.Addr)
-				if err != nil {
-					logs.Critical("Listen for HTTP[graceful mode]: ", err)
-					endRunning <- true
-					return
-				}
-				for _, callback := range app.LifeCycleCallbacks {
-					callback.AfterStart(app)
-				}
-				if err := server.ServeWithListener(ln); err != nil {
-					logs.Critical("ServeWithListener: ", err, fmt.Sprintf("%d", os.Getpid()))
-					time.Sleep(100 * time.Microsecond)
-				}
-				endRunning <- true
-			}()
-		}
-		<-endRunning
+		app.runGraceful(addr, endRunning)
 		return
 	}
+
 
 	// run normal mode
 	if app.Cfg.Listen.EnableHTTPS || app.Cfg.Listen.EnableMutualHTTPS {
@@ -302,6 +228,136 @@ func (app *HttpServer) Run(addr string, mws ...MiddleWare) {
 		}()
 	}
 	<-endRunning
+}
+
+// Shutdown gracefully shuts down BeeApp using the standard library http.Server.Shutdown.
+func Shutdown(ctx context.Context) error {
+	return BeeApp.Shutdown(ctx)
+}
+
+// Shutdown gracefully stops the HTTP server, triggers BeforeShutdown callbacks, and flushes logs.
+func (app *HttpServer) Shutdown(ctx context.Context) error {
+	for _, lifeCycleCallback := range app.LifeCycleCallbacks {
+		lifeCycleCallback.BeforeShutdown(app)
+	}
+	var err error
+	if app.Server != nil {
+		err = app.Server.Shutdown(ctx)
+	}
+	logs.GetBeeLogger().Flush()
+	return err
+}
+
+func (app *HttpServer) runGraceful(httpAddr string, endRunning chan bool) {
+	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	network := "tcp"
+	if app.Cfg.Listen.ListenTCP4 {
+		network = "tcp4"
+	}
+
+	if app.Cfg.Listen.EnableHTTPS || app.Cfg.Listen.EnableMutualHTTPS {
+		go func() {
+			time.Sleep(1000 * time.Microsecond)
+			httpsAddr := app.Cfg.Listen.HTTPSAddr
+			if app.Cfg.Listen.HTTPSPort != 0 {
+				httpsAddr = fmt.Sprintf("%s:%d", app.Cfg.Listen.HTTPSAddr, app.Cfg.Listen.HTTPSPort)
+			}
+			app.Server.Addr = httpsAddr
+			if err := app.configureTLS(); err != nil {
+				logs.Critical("ConfigureTLS[graceful mode]: ", err)
+				endRunning <- true
+				return
+			}
+			ln, err := net.Listen(network, httpsAddr)
+			if err != nil {
+				logs.Critical("Listen for HTTPS[graceful mode]: ", err)
+				endRunning <- true
+				return
+			}
+			tlsLn := tls.NewListener(ln, app.Server.TLSConfig)
+			for _, callback := range app.LifeCycleCallbacks {
+				callback.AfterStart(app)
+			}
+			logs.Info("graceful https server Running on https://%s", httpsAddr)
+			if err = app.Server.Serve(tlsLn); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				logs.Critical("ServeTLS: ", err, fmt.Sprintf("%d", os.Getpid()))
+				time.Sleep(100 * time.Microsecond)
+			}
+			endRunning <- true
+		}()
+	}
+
+	if app.Cfg.Listen.EnableHTTP {
+		go func() {
+			ln, err := net.Listen(network, httpAddr)
+			if err != nil {
+				logs.Critical("Listen for HTTP[graceful mode]: ", err)
+				endRunning <- true
+				return
+			}
+			for _, callback := range app.LifeCycleCallbacks {
+				callback.AfterStart(app)
+			}
+			logs.Info("graceful http server Running on http://%s", httpAddr)
+			if err := app.Server.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				logs.Critical("Serve: ", err, fmt.Sprintf("%d", os.Getpid()))
+				time.Sleep(100 * time.Microsecond)
+			}
+			endRunning <- true
+		}()
+	}
+
+	select {
+	case <-sigCtx.Done():
+		timeout := app.Cfg.Listen.GracefulTimeout
+		if timeout <= 0 {
+			timeout = 30 * time.Second
+		}
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		if err := app.Shutdown(shutdownCtx); err != nil {
+			logs.Error("Graceful shutdown error: ", err)
+		}
+	case <-endRunning:
+	}
+}
+
+func (app *HttpServer) configureTLS() error {
+	var cfg *tls.Config
+	if app.Server.TLSConfig != nil {
+		cfg = app.Server.TLSConfig.Clone()
+	} else {
+		cfg = &tls.Config{}
+	}
+	if app.Cfg.Listen.AutoTLS {
+		m := autocert.Manager{
+			Prompt:     autocert.AcceptTOS,
+			HostPolicy: autocert.HostWhitelist(app.Cfg.Listen.Domains...),
+			Cache:      autocert.DirCache(app.Cfg.Listen.TLSCacheDir),
+		}
+		cfg.GetCertificate = m.GetCertificate
+		app.Server.TLSConfig = cfg
+		return nil
+	}
+	cert, err := tls.LoadX509KeyPair(app.Cfg.Listen.HTTPSCertFile, app.Cfg.Listen.HTTPSKeyFile)
+	if err != nil {
+		return err
+	}
+	cfg.Certificates = []tls.Certificate{cert}
+	if app.Cfg.Listen.EnableMutualHTTPS {
+		pool := x509.NewCertPool()
+		data, err := os.ReadFile(app.Cfg.Listen.TrustCaFile)
+		if err != nil {
+			return fmt.Errorf("MutualHTTPS should provide TrustCaFile: %w", err)
+		}
+		pool.AppendCertsFromPEM(data)
+		cfg.ClientCAs = pool
+		cfg.ClientAuth = tls.ClientAuthType(app.Cfg.Listen.ClientAuth)
+	}
+	app.Server.TLSConfig = cfg
+	return nil
 }
 
 // Router see HttpServer.Router

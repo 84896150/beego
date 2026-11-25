@@ -1055,3 +1055,35 @@ func TestGetAllControllerInfo(t *testing.T) {
 		t.Errorf("ControllerInfo.GetMethod expected %#v, but %#v got", expectedMethods, actualMethods)
 	}
 }
+
+func TestRequestIDInjection(t *testing.T) {
+	handler := NewControllerRegister()
+	var capturedCtxID string
+	handler.Get("/ping-req-id", func(ctx *context.Context) {
+		capturedCtxID = logs.RequestIDFromContext(ctx.Request.Context())
+		ctx.Output.Body([]byte(capturedCtxID))
+	})
+
+	// 1. Auto-generate UUIDv7 when X-Request-Id header is absent
+	r1, _ := http.NewRequest(http.MethodGet, "/ping-req-id", nil)
+	w1 := httptest.NewRecorder()
+	handler.ServeHTTP(w1, r1)
+	if w1.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w1.Code)
+	}
+	headerID1 := w1.Header().Get("X-Request-Id")
+	if headerID1 == "" || headerID1 != w1.Body.String() || headerID1 != capturedCtxID {
+		t.Fatalf("expected matching auto-generated X-Request-Id in header/context/body, got header=%q body=%q ctx=%q",
+			headerID1, w1.Body.String(), capturedCtxID)
+	}
+
+	// 2. Preserve caller-supplied X-Request-Id
+	r2, _ := http.NewRequest(http.MethodGet, "/ping-req-id", nil)
+	r2.Header.Set("X-Request-Id", "trace-custom-123")
+	w2 := httptest.NewRecorder()
+	handler.ServeHTTP(w2, r2)
+	if w2.Header().Get("X-Request-Id") != "trace-custom-123" || capturedCtxID != "trace-custom-123" {
+		t.Fatalf("expected custom X-Request-Id propagated, got header=%q ctx=%q",
+			w2.Header().Get("X-Request-Id"), capturedCtxID)
+	}
+}

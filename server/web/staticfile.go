@@ -17,6 +17,8 @@ package web
 import (
 	"bytes"
 	"errors"
+	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path"
@@ -32,10 +34,135 @@ import (
 	"github.com/beego/beego/v2/server/web/context"
 )
 
-var errNotStaticRequest = errors.New("request not a static file request")
+var (
+	errNotStaticRequest = errors.New("request not a static file request")
+	staticFSLock        sync.RWMutex
+	staticFSMap         = make(map[string]fs.FS)
+)
+
+func normalizeStaticPrefix(url string) string {
+	if !strings.HasPrefix(url, "/") {
+		url = "/" + url
+	}
+	if url != "/" {
+		url = strings.TrimRight(url, "/")
+	}
+	return url
+}
+
+// SetStaticFS mounts an io/fs.FS (such as embed.FS) at urlPrefix for single-binary static serving.
+func SetStaticFS(urlPrefix string, fsys fs.FS) *HttpServer {
+	return BeeApp.SetStaticFS(urlPrefix, fsys)
+}
+
+// SetStaticFS mounts an io/fs.FS (such as embed.FS) at urlPrefix for single-binary static serving.
+func (app *HttpServer) SetStaticFS(urlPrefix string, fsys fs.FS) *HttpServer {
+	prefix := normalizeStaticPrefix(urlPrefix)
+	staticFSLock.Lock()
+	if fsys == nil {
+		delete(staticFSMap, prefix)
+	} else {
+		staticFSMap[prefix] = fsys
+	}
+	staticFSLock.Unlock()
+	return app
+}
+
+// DelStaticFS unmounts an io/fs.FS previously registered at urlPrefix.
+func DelStaticFS(urlPrefix string) *HttpServer {
+	return BeeApp.DelStaticFS(urlPrefix)
+}
+
+// DelStaticFS unmounts an io/fs.FS previously registered at urlPrefix.
+func (app *HttpServer) DelStaticFS(urlPrefix string) *HttpServer {
+	prefix := normalizeStaticPrefix(urlPrefix)
+	staticFSLock.Lock()
+	delete(staticFSMap, prefix)
+	staticFSLock.Unlock()
+	return app
+}
+
+func matchStaticFS(requestPath string) (string, fs.FS, bool) {
+	staticFSLock.RLock()
+	defer staticFSLock.RUnlock()
+	if len(staticFSMap) == 0 {
+		return "", nil, false
+	}
+	bestPrefix := ""
+	var bestFS fs.FS
+	for prefix, fsys := range staticFSMap {
+		if prefix == "/" || requestPath == prefix || (strings.HasPrefix(requestPath, prefix) && len(requestPath) > len(prefix) && requestPath[len(prefix)] == '/') {
+			if bestFS == nil || len(prefix) > len(bestPrefix) {
+				bestPrefix = prefix
+				bestFS = fsys
+			}
+		}
+	}
+	return bestPrefix, bestFS, bestFS != nil
+}
+
+func tryServeStaticFS(ctx *context.Context) bool {
+	requestPath := path.Clean("/" + ctx.Request.URL.Path)
+	prefix, fsys, ok := matchStaticFS(requestPath)
+	if !ok {
+		return false
+	}
+
+	sub := requestPath
+	if prefix != "/" {
+		sub = requestPath[len(prefix):]
+	}
+	rel := strings.TrimPrefix(path.Clean("/"+sub), "/")
+	if rel == "" {
+		rel = "."
+	}
+
+	fi, err := fs.Stat(fsys, rel)
+	if err != nil {
+		return false
+	}
+	target := rel
+	if fi.IsDir() {
+		indexRel := "index.html"
+		if rel != "." {
+			indexRel = path.Join(rel, "index.html")
+		}
+		if ifi, idxErr := fs.Stat(fsys, indexRel); idxErr == nil && !ifi.IsDir() {
+			fi = ifi
+			target = indexRel
+		} else {
+			if !BConfig.WebConfig.DirectoryIndex {
+				exception("403", ctx)
+				return true
+			}
+			return false
+		}
+	}
+
+	f, err := fsys.Open(target)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	if seeker, ok := f.(io.ReadSeeker); ok {
+		http.ServeContent(ctx.ResponseWriter, ctx.Request, fi.Name(), fi.ModTime(), seeker)
+		return true
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return false
+	}
+	http.ServeContent(ctx.ResponseWriter, ctx.Request, fi.Name(), fi.ModTime(), bytes.NewReader(data))
+	return true
+}
 
 func serverStaticRouter(ctx *context.Context) {
 	if ctx.Input.Method() != "GET" && ctx.Input.Method() != "HEAD" {
+		return
+	}
+
+	if tryServeStaticFS(ctx) {
 		return
 	}
 

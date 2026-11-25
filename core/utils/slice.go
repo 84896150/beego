@@ -15,8 +15,8 @@
 package utils
 
 import (
-	"math/rand"
-	"time"
+	"math/rand/v2"
+	"slices"
 )
 
 type reducetype func(interface{}) interface{}
@@ -25,12 +25,7 @@ type filtertype func(interface{}) bool
 
 // InSlice checks given string in string slice or not.
 func InSlice(v string, sl []string) bool {
-	for _, vv := range sl {
-		if vv == v {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(sl, v)
 }
 
 // InSliceIface checks given interface in interface slice.
@@ -49,8 +44,6 @@ func SliceRandList(min, max int) []int {
 		min, max = max, min
 	}
 	length := max - min + 1
-	t0 := time.Now()
-	rand.Seed(int64(t0.Nanosecond()))
 	list := rand.Perm(length)
 	for index := range list {
 		list[index] += min
@@ -74,7 +67,7 @@ func SliceReduce(slice []interface{}, a reducetype) (dslice []interface{}) {
 
 // SliceRand returns random one from slice.
 func SliceRand(a []interface{}) (b interface{}) {
-	randnum := rand.Intn(len(a))
+	randnum := rand.IntN(len(a))
 	b = a[randnum]
 	return
 }
@@ -162,10 +155,8 @@ func SliceUnique(slice []interface{}) (uniqueslice []interface{}) {
 
 // SliceShuffle shuffles a slice.
 func SliceShuffle(slice []interface{}) []interface{} {
-	for i := 0; i < len(slice); i++ {
-		a := rand.Intn(len(slice))
-		b := rand.Intn(len(slice))
-		slice[a], slice[b] = slice[b], slice[a]
-	}
+	rand.Shuffle(len(slice), func(i, j int) {
+		slice[i], slice[j] = slice[j], slice[i]
+	})
 	return slice
 }
