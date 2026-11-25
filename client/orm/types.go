@@ -100,12 +100,6 @@ type Driver interface {
 type Fielder = models.Fielder
 
 type TxBeginner interface {
-	// Begin self control transaction
-	Begin() (TxOrmer, error)
-	BeginWithCtx(ctx context.Context) (TxOrmer, error)
-	BeginWithOpts(opts *sql.TxOptions) (TxOrmer, error)
-	BeginWithCtxAndOpts(ctx context.Context, opts *sql.TxOptions) (TxOrmer, error)
-
 	// DoTx closure control transaction
 	DoTx(task func(ctx context.Context, txOrm TxOrmer) error) error
 	DoTxWithCtx(ctx context.Context, task func(ctx context.Context, txOrm TxOrmer) error) error
@@ -113,8 +107,18 @@ type TxBeginner interface {
 	DoTxWithCtxAndOpts(ctx context.Context, opts *sql.TxOptions, task func(ctx context.Context, txOrm TxOrmer) error) error
 }
 
-type TxCommitter interface {
-	txEnder
+type txStarter interface {
+	beginWithCtxAndOpts(ctx context.Context, opts *sql.TxOptions) (TxOrmer, error)
+}
+
+type txCommitter interface {
+	commit() error
+	rollback() error
+	rollbackUnlessCommit() error
+}
+
+type tableQuerier interface {
+	queryTable(ptrStructOrTableName interface{}) QuerySeter
 }
 
 // transaction beginner
@@ -225,17 +229,6 @@ type DQL interface {
 	// 	post := Post{Id: 4}
 	// 	m2m := Ormer.QueryM2M(&post, "Tags")
 	QueryM2M(md interface{}, name string) QueryM2Mer
-	// QueryM2MWithCtx NOTE: this method is deprecated, context parameter will not take effect.
-	// Use context.Context directly on methods with `WithCtx` suffix such as InsertWithCtx/UpdateWithCtx
-	QueryM2MWithCtx(ctx context.Context, md interface{}, name string) QueryM2Mer
-
-	// QueryTable return a QuerySeter for table operations.
-	// table name can be string or struct.
-	// e.g. QueryTable("user"), QueryTable(&user{}) or QueryTable((*User)(nil)),
-	QueryTable(ptrStructOrTableName interface{}) QuerySeter
-	// QueryTableWithCtx NOTE: this method is deprecated, context parameter will not take effect.
-	// Use context.Context directly on methods with `WithCtx` suffix such as InsertWithCtx/UpdateWithCtx
-	QueryTableWithCtx(ctx context.Context, ptrStructOrTableName interface{}) QuerySeter
 
 	DBStats() *sql.DBStats
 }
@@ -248,6 +241,7 @@ type ormer interface {
 	DQL
 	DML
 	DriverGetter
+	tableQuerier
 }
 
 // QueryExecutor wrapping for ormer
@@ -262,7 +256,7 @@ type Ormer interface {
 
 type TxOrmer interface {
 	QueryExecutor
-	TxCommitter
+	txCommitter
 }
 
 // Inserter insert prepared statement

@@ -40,19 +40,7 @@ func TestDoNothingOrm(t *testing.T) {
 	assert.Nil(t, o.ReadWithCtx(nil, nil))
 	assert.Nil(t, o.Read(nil))
 
-	txOrm, err := o.BeginWithCtxAndOpts(nil, nil)
-	assert.Nil(t, err)
-	assert.Nil(t, txOrm)
-
-	txOrm, err = o.BeginWithCtx(nil)
-	assert.Nil(t, err)
-	assert.Nil(t, txOrm)
-
-	txOrm, err = o.BeginWithOpts(nil)
-	assert.Nil(t, err)
-	assert.Nil(t, txOrm)
-
-	txOrm, err = o.Begin()
+	txOrm, err := o.beginWithCtxAndOpts(nil, nil)
 	assert.Nil(t, err)
 	assert.Nil(t, txOrm)
 
@@ -91,7 +79,7 @@ func TestDoNothingOrm(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, int64(0), i)
 
-	assert.Nil(t, o.QueryTable(nil))
+	assert.Nil(t, o.queryTable(nil))
 
 	assert.Nil(t, o.Read(nil))
 	assert.Nil(t, o.ReadWithCtx(nil, nil))
@@ -127,6 +115,7 @@ func TestDoNothingOrm(t *testing.T) {
 	assert.Nil(t, o.DBStats())
 
 	to := &DoNothingTxOrm{}
-	assert.Nil(t, to.Commit())
-	assert.Nil(t, to.Rollback())
+	assert.Nil(t, to.commit())
+	assert.Nil(t, to.rollback())
+	assert.Nil(t, to.rollbackUnlessCommit())
 }

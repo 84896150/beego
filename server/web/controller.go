@@ -407,9 +407,13 @@ func (c *Controller) CustomAbort(status int, body string) {
 	panic(ErrAbort)
 }
 
-// StopRun makes panic of USERSTOPRUN error and go to recover function if defined.
-func (c *Controller) StopRun() {
-	panic(ErrAbort)
+// ParamInt64 extracts a route parameter and parses it as a base-10 int64.
+func (c *Controller) ParamInt64(key string) (int64, error) {
+	raw := strings.TrimSpace(c.Ctx.Input.Param(key))
+	if raw == "" {
+		return 0, fmt.Errorf("missing route parameter %s", key)
+	}
+	return strconv.ParseInt(raw, 10, 64)
 }
 
 // URLFor does another controller handler in this request function.

@@ -1391,6 +1391,11 @@ func (d *dbBase) Count(ctx context.Context, q dbQuerier, qs querySet, mi *models
 }
 
 func (d *dbBase) countSQL(qs querySet, mi *models.ModelInfo, cond *Condition, tz *time.Location) (string, []interface{}) {
+	qs.limit = 0
+	qs.offset = 0
+	qs.orders = nil
+	qs.forUpdate = false
+
 	tables := newDbTables(mi, d.ins)
 	tables.parseRelated(qs.related, qs.relDepth)
 

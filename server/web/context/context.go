@@ -22,6 +22,7 @@ package context
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -79,23 +80,53 @@ type Context struct {
 
 func (ctx *Context) Bind(obj interface{}) error {
 	ct, exist := ctx.Request.Header["Content-Type"]
-	if !exist || len(ct) == 0 {
-		return ctx.BindJSON(obj)
+	mediaType := ""
+	if exist && len(ct) > 0 {
+		rawCT := ct[0]
+		if idx := strings.IndexByte(rawCT, ';'); idx >= 0 {
+			rawCT = rawCT[:idx]
+		}
+		mediaType = strings.ToLower(strings.TrimSpace(rawCT))
 	}
-	i, l := 0, len(ct[0])
-	for i < l && ct[0][i] != ';' {
-		i++
+
+	method := http.MethodGet
+	if ctx.Request != nil && ctx.Request.Method != "" {
+		method = strings.ToUpper(ctx.Request.Method)
 	}
-	switch ct[0][0:i] {
+	trimmedBody := bytes.TrimSpace(ctx.Input.RequestBody)
+
+	if mediaType == "" {
+		if ctx.Request != nil && ctx.Request.Body == nil {
+			ctx.Request.Body = http.NoBody
+		}
+		if len(trimmedBody) > 0 && (trimmedBody[0] == '{' || trimmedBody[0] == '[') {
+			return ctx.BindJSON(obj)
+		}
+		return ctx.BindForm(obj)
+	}
+
+	switch mediaType {
 	case ApplicationJSON:
+		if len(trimmedBody) == 0 && (method == http.MethodGet || method == http.MethodDelete || method == http.MethodHead) {
+			return ctx.BindForm(obj)
+		}
 		return ctx.BindJSON(obj)
 	case ApplicationXML, TextXML:
 		return ctx.BindXML(obj)
 	case ApplicationForm:
 		return ctx.BindForm(obj)
+	case "multipart/form-data":
+		if err := ctx.Request.ParseMultipartForm(32 << 20); err != nil && !errors.Is(err, http.ErrNotMultipart) {
+			return err
+		}
+		return ParseForm(ctx.Request.Form, obj)
 	case ApplicationProto:
-		return ctx.BindProtobuf(obj.(proto.Message))
-	case ApplicationYAML:
+		msg, ok := obj.(proto.Message)
+		if !ok {
+			return fmt.Errorf("context.Bind: target %T does not implement proto.Message", obj)
+		}
+		return ctx.BindProtobuf(msg)
+	case ApplicationYAML, "text/yaml", "application/yaml":
 		return ctx.BindYAML(obj)
 	default:
 		return errors.New("Unsupported Content-Type:" + ct[0])

@@ -72,25 +72,22 @@ func TestFilterOrmDecoratorBeginTx(t *testing.T) {
 			return next(ctx, inv)
 		}
 	})
-	to, err := od.Begin()
-	assert.True(t, validateBeginResult(t, to, err))
-
-	to, err = od.BeginWithOpts(nil)
+	to, err := od.(*filterOrmDecorator).beginWithCtxAndOpts(context.Background(), nil)
 	assert.True(t, validateBeginResult(t, to, err))
 
 	ctx := context.WithValue(context.Background(), TxNameKey, "Commit_tx")
-	to, err = od.BeginWithCtx(ctx)
+	to, err = od.(*filterOrmDecorator).beginWithCtxAndOpts(ctx, nil)
 	assert.True(t, validateBeginResult(t, to, err))
 
-	err = to.Commit()
+	err = to.commit()
 	assert.NotNil(t, err)
 	assert.Equal(t, "commit", err.Error())
 
 	ctx = context.WithValue(context.Background(), TxNameKey, "Rollback_tx")
-	to, err = od.BeginWithCtxAndOpts(ctx, nil)
+	to, err = od.(*filterOrmDecorator).beginWithCtxAndOpts(ctx, nil)
 	assert.True(t, validateBeginResult(t, to, err))
 
-	err = to.Rollback()
+	err = to.rollback()
 	assert.NotNil(t, err)
 	assert.Equal(t, "rollback", err.Error())
 }
@@ -290,7 +287,7 @@ func TestFilterOrmDecoratorQueryTable(t *testing.T) {
 			return next(ctx, inv)
 		}
 	})
-	res := od.QueryTable(&FilterTestEntity{})
+	res := od.(*filterOrmDecorator).queryTable(&FilterTestEntity{})
 	assert.Nil(t, res)
 }
 
@@ -385,7 +382,7 @@ func (f *filterMockOrm) DeleteWithCtx(ctx context.Context, md interface{}, cols 
 	return -2, errors.New("delete error")
 }
 
-func (f *filterMockOrm) BeginWithCtxAndOpts(ctx context.Context, opts *sql.TxOptions) (TxOrmer, error) {
+func (f *filterMockOrm) beginWithCtxAndOpts(ctx context.Context, opts *sql.TxOptions) (TxOrmer, error) {
 	return &filterMockOrm{}, errors.New("begin tx")
 }
 
@@ -393,15 +390,15 @@ func (f *filterMockOrm) ReadWithCtx(ctx context.Context, md interface{}, cols ..
 	return errors.New("read error")
 }
 
-func (f *filterMockOrm) Commit() error {
+func (f *filterMockOrm) commit() error {
 	return errors.New("commit")
 }
 
-func (f *filterMockOrm) Rollback() error {
+func (f *filterMockOrm) rollback() error {
 	return errors.New("rollback")
 }
 
-func (f *filterMockOrm) RollbackUnlessCommit() error {
+func (f *filterMockOrm) rollbackUnlessCommit() error {
 	return errors.New("rollback unless commit")
 }
 
@@ -414,7 +411,7 @@ func (f *filterMockOrm) DBStats() *sql.DBStats {
 func validateBeginResult(t *testing.T, to TxOrmer, err error) bool {
 	assert.NotNil(t, err)
 	assert.Equal(t, "begin tx", err.Error())
-	_, ok := to.(*filterOrmDecorator).TxCommitter.(*filterMockOrm)
+	_, ok := to.(*filterOrmDecorator).txCommitter.(*filterMockOrm)
 	assert.True(t, ok)
 	return true
 }

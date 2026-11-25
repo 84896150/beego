@@ -137,19 +137,6 @@ func TestNamespaceRouter(t *testing.T) {
 	}
 }
 
-func TestNamespaceAutoFunc(t *testing.T) {
-	r, _ := http.NewRequest("GET", "/v1/test/list", nil)
-	w := httptest.NewRecorder()
-
-	ns := NewNamespace("/v1")
-	ns.AutoRouter(&TestController{})
-	AddNamespace(ns)
-	BeeApp.Handlers.ServeHTTP(w, r)
-	if w.Body.String() != "i am list" {
-		t.Errorf("user define func can't run")
-	}
-}
-
 func TestNamespaceFilter(t *testing.T) {
 	r, _ := http.NewRequest("GET", "/v1/user/123", nil)
 	w := httptest.NewRecorder()
@@ -176,7 +163,7 @@ func TestNamespaceCond(t *testing.T) {
 	ns.Cond(func(ctx *context.Context) bool {
 		return ctx.Input.Domain() == "beego.vip"
 	}).
-		AutoRouter(&TestController{})
+		Router("/test/list", &TestController{}, "*:List")
 	AddNamespace(ns)
 	BeeApp.Handlers.ServeHTTP(w, r)
 	if w.Code != 405 {
@@ -188,7 +175,6 @@ func TestNamespaceInside(t *testing.T) {
 	r, _ := http.NewRequest("GET", "/v3/shop/order/123", nil)
 	w := httptest.NewRecorder()
 	ns := NewNamespace("/v3",
-		NSAutoRouter(&TestController{}),
 		NSNamespace("/shop",
 			NSGet("/order/:id", func(ctx *context.Context) {
 				ctx.Output.Body([]byte(ctx.Input.Param(":id")))

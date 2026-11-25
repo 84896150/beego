@@ -30,6 +30,11 @@ func RegisterModel(models ...interface{}) {
 
 // RegisterModelWithPrefix Register models with a prefix
 func RegisterModelWithPrefix(prefix string, models ...interface{}) {
+	if IsStrictModelGuardEnabled() {
+		if err := ValidateModelSpecs(models...); err != nil {
+			panic(err)
+		}
+	}
 	if err := defaultModelCache.Register(prefix, true, models...); err != nil {
 		panic(err)
 	}
@@ -37,6 +42,11 @@ func RegisterModelWithPrefix(prefix string, models ...interface{}) {
 
 // RegisterModelWithSuffix Register models with a suffix
 func RegisterModelWithSuffix(suffix string, models ...interface{}) {
+	if IsStrictModelGuardEnabled() {
+		if err := ValidateModelSpecs(models...); err != nil {
+			panic(err)
+		}
+	}
 	if err := defaultModelCache.Register(suffix, false, models...); err != nil {
 		panic(err)
 	}

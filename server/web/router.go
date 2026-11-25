@@ -15,10 +15,8 @@
 package web
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"path"
 	"reflect"
@@ -29,7 +27,6 @@ import (
 	"time"
 
 	"github.com/beego/beego/v2/core/logs"
-	"github.com/beego/beego/v2/core/utils"
 	beecontext "github.com/beego/beego/v2/server/web/context"
 	"github.com/beego/beego/v2/server/web/context/param"
 )
@@ -327,24 +324,6 @@ func (p *ControllerRegister) addToRouter(method, pattern string, r *ControllerIn
 		t := NewTree()
 		t.AddRouter(pattern, r)
 		p.routers[method] = t
-	}
-}
-
-// Include only when the Runmode is dev will generate router file in the router/auto.go from the controller
-// Include(&BankAccount{}, &OrderController{},&RefundController{},&ReceiptController{})
-func (p *ControllerRegister) Include(cList ...ControllerInterface) {
-	for _, c := range cList {
-		reflectVal := reflect.ValueOf(c)
-		t := reflect.Indirect(reflectVal).Type()
-		key := t.PkgPath() + ":" + t.Name()
-		if comm, ok := GlobalControllerRouter[key]; ok {
-			for _, a := range comm {
-				for _, f := range a.Filters {
-					p.InsertFilter(f.Pattern, f.Pos, f.Filter, WithReturnOnOutput(f.ReturnOnOutput), WithResetParams(f.ResetParams))
-				}
-				p.addWithMethodParams(a.Router, c, a.MethodParams, WithRouterMethods(c, strings.Join(a.AllowHTTPMethods, ",")+":"+a.Method))
-			}
-		}
 	}
 }
 
@@ -746,54 +725,6 @@ func (p *ControllerRegister) Handler(pattern string, h http.Handler, options ...
 	}
 }
 
-// AddAuto router to ControllerRegister.
-// example beego.AddAuto(&MainController{}),
-// MainController has method List and Page.
-// visit the url /main/list to execute List function
-// /main/page to execute Page function.
-func (p *ControllerRegister) AddAuto(c ControllerInterface) {
-	p.AddAutoPrefix("/", c)
-}
-
-// AddAutoPrefix Add auto router to ControllerRegister with prefix.
-// example beego.AddAutoPrefix("/admin",&MainController{}),
-// MainController has method List and Page.
-// visit the url /admin/main/list to execute List function
-// /admin/main/page to execute Page function.
-func (p *ControllerRegister) AddAutoPrefix(prefix string, c ControllerInterface) {
-	reflectVal := reflect.ValueOf(c)
-	rt := reflectVal.Type()
-	ct := reflect.Indirect(reflectVal).Type()
-	controllerName := strings.TrimSuffix(ct.Name(), "Controller")
-	for i := 0; i < rt.NumMethod(); i++ {
-		methodName := rt.Method(i).Name
-		if !utils.InSlice(methodName, exceptMethod) {
-			p.addAutoPrefixMethod(prefix, controllerName, methodName, ct)
-		}
-	}
-}
-
-func (p *ControllerRegister) addAutoPrefixMethod(prefix, controllerName, methodName string, ctrl reflect.Type) {
-	pattern := path.Join(prefix, strings.ToLower(controllerName), strings.ToLower(methodName), "*")
-	patternInit := path.Join(prefix, controllerName, methodName, "*")
-	patternFix := path.Join(prefix, strings.ToLower(controllerName), strings.ToLower(methodName))
-	patternFixInit := path.Join(prefix, controllerName, methodName)
-
-	route := p.createBeegoRouter(ctrl, pattern)
-	route.methods = map[string]string{"*": methodName}
-	for m := range HTTPMETHOD {
-
-		p.addToRouter(m, pattern, route)
-
-		// only case sensitive, we add three more routes
-		if p.cfg.RouterCaseSensitive {
-			p.addToRouter(m, patternInit, route)
-			p.addToRouter(m, patternFix, route)
-			p.addToRouter(m, patternFixInit, route)
-		}
-	}
-}
-
 // InsertFilter Add a FilterFunc with pattern rule and action constant.
 // params is for:
 //  1. setting the returnOnOutput value (false allows multiple filters to execute)
@@ -1050,10 +981,10 @@ func (p *ControllerRegister) serveHttp(ctx *beecontext.Context) {
 	}
 
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		body := ctx.Input.Context.Request.Body
-		if body == nil {
-			body = io.NopCloser(bytes.NewReader([]byte{}))
+		if ctx.Input.Context.Request.Body == nil {
+			ctx.Input.Context.Request.Body = http.NoBody
 		}
+		body := ctx.Input.Context.Request.Body
 
 		if ctx.Input.IsUpload() {
 			ctx.Input.Context.Request.Body = http.MaxBytesReader(ctx.Input.Context.ResponseWriter,
@@ -1189,68 +1120,78 @@ func (p *ControllerRegister) serveHttp(ctx *beecontext.Context) {
 			}
 		}
 
-		// call the controller init function
+		// call the controller init function and guarantee Finish runs even on ErrAbort
 		execController.Init(ctx, runRouter.Name(), runMethod, execController)
 
-		// call prepare function
-		execController.Prepare()
-
-		// if XSRF is Enable then check cookie where there has any cookie in the  request's cookie _csrf
-		if p.cfg.WebConfig.EnableXSRF {
-			execController.XSRFToken()
-			if r.Method == http.MethodPost || r.Method == http.MethodDelete || r.Method == http.MethodPut ||
-				(r.Method == http.MethodPost && (ctx.Input.Query("_method") == http.MethodDelete || ctx.Input.Query("_method") == http.MethodPut)) {
-				execController.CheckXSRFCookie()
-			}
-		}
-
-		execController.URLMapping()
-
-		if !ctx.ResponseWriter.Started {
-			// exec main logic
-			switch runMethod {
-			case http.MethodGet:
-				execController.Get()
-			case http.MethodPost:
-				execController.Post()
-			case http.MethodDelete:
-				execController.Delete()
-			case http.MethodPut:
-				execController.Put()
-			case http.MethodHead:
-				execController.Head()
-			case http.MethodPatch:
-				execController.Patch()
-			case http.MethodOptions:
-				execController.Options()
-			case http.MethodTrace:
-				execController.Trace()
-			default:
-				if !execController.HandlerFunc(runMethod) {
-					vc := reflect.ValueOf(execController)
-					method := vc.MethodByName(runMethod)
-					in := param.ConvertParams(methodParams, method.Type(), ctx)
-					out := method.Call(in)
-
-					// For backward compatibility we only handle response if we had incoming methodParams
-					if methodParams != nil {
-						p.handleParamResponse(ctx, execController, out)
+		func() {
+			defer func() {
+				if rErr := recover(); rErr != nil {
+					execController.Finish()
+					if rErr == ErrAbort {
+						return
 					}
+					panic(rErr)
+				}
+				execController.Finish()
+			}()
+
+			// call prepare function
+			execController.Prepare()
+
+			// if XSRF is Enable then check cookie where there has any cookie in the  request's cookie _csrf
+			if p.cfg.WebConfig.EnableXSRF {
+				execController.XSRFToken()
+				if r.Method == http.MethodPost || r.Method == http.MethodDelete || r.Method == http.MethodPut ||
+					(r.Method == http.MethodPost && (ctx.Input.Query("_method") == http.MethodDelete || ctx.Input.Query("_method") == http.MethodPut)) {
+					execController.CheckXSRFCookie()
 				}
 			}
 
-			// render template
-			if !ctx.ResponseWriter.Started && ctx.Output.Status == 0 {
-				if p.cfg.WebConfig.AutoRender {
-					if err := execController.Render(); err != nil {
-						logs.Error(err)
+			execController.URLMapping()
+
+			if !ctx.ResponseWriter.Started {
+				// exec main logic
+				switch runMethod {
+				case http.MethodGet:
+					execController.Get()
+				case http.MethodPost:
+					execController.Post()
+				case http.MethodDelete:
+					execController.Delete()
+				case http.MethodPut:
+					execController.Put()
+				case http.MethodHead:
+					execController.Head()
+				case http.MethodPatch:
+					execController.Patch()
+				case http.MethodOptions:
+					execController.Options()
+				case http.MethodTrace:
+					execController.Trace()
+				default:
+					if !execController.HandlerFunc(runMethod) {
+						vc := reflect.ValueOf(execController)
+						method := vc.MethodByName(runMethod)
+						in := param.ConvertParams(methodParams, method.Type(), ctx)
+						out := method.Call(in)
+
+						// For backward compatibility we only handle response if we had incoming methodParams
+						if methodParams != nil {
+							p.handleParamResponse(ctx, execController, out)
+						}
+					}
+				}
+
+				// render template
+				if !ctx.ResponseWriter.Started && ctx.Output.Status == 0 {
+					if p.cfg.WebConfig.AutoRender {
+						if err := execController.Render(); err != nil {
+							logs.Error(err)
+						}
 					}
 				}
 			}
-		}
-
-		// finish all runRouter. release resource
-		execController.Finish()
+		}()
 	}
 
 	// execute middleware filters

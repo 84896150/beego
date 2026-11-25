@@ -334,7 +334,7 @@ func TestTM(t *testing.T) {
 	_, err := dORM.Insert(tm)
 	throwFail(t, err)
 
-	err = dORM.QueryTable("tm").One(&recTM)
+	err = dORM.queryTable("tm").One(&recTM)
 	throwFail(t, err)
 	throwFail(t, AssertIs(recTM.TMPrecision1.String(), "2020-08-07 02:07:04.123 +0000 UTC"))
 	throwFail(t, AssertIs(recTM.TMPrecision2.String(), "2020-08-07 02:07:04.1235 +0000 UTC"))
@@ -368,7 +368,7 @@ func TestUnregisterModel(t *testing.T) {
 			Salary:       3000,
 		},
 	}
-	qs := dORM.QueryTable("dept_info")
+	qs := dORM.queryTable("dept_info")
 	i, _ := qs.PrepareInsert()
 	for _, d := range data {
 		_, err := i.Insert(d)
@@ -379,7 +379,7 @@ func TestUnregisterModel(t *testing.T) {
 
 	f := func() {
 		var res []UnregisterModel
-		n, err := dORM.QueryTable("dept_info").All(&res)
+		n, err := dORM.queryTable("dept_info").All(&res)
 		throwFail(t, err)
 		throwFail(t, AssertIs(n, 5))
 		throwFail(t, AssertIs(res[0].EmployeeName, "A1"))
@@ -890,10 +890,10 @@ func TestCustomField(t *testing.T) {
 func TestExpr(t *testing.T) {
 	user := &User{}
 	var qs QuerySeter
-	assert.NotPanics(t, func() { qs = dORM.QueryTable(user) })
-	assert.NotPanics(t, func() { qs = dORM.QueryTable((*User)(nil)) })
-	assert.NotPanics(t, func() { qs = dORM.QueryTable("User") })
-	assert.NotPanics(t, func() { qs = dORM.QueryTable("user") })
+	assert.NotPanics(t, func() { qs = dORM.queryTable(user) })
+	assert.NotPanics(t, func() { qs = dORM.queryTable((*User)(nil)) })
+	assert.NotPanics(t, func() { qs = dORM.queryTable("User") })
+	assert.NotPanics(t, func() { qs = dORM.queryTable("user") })
 	num, err := qs.Filter("UserName", "slene").Filter("user_name", "slene").Filter("profile__Age", 28).Count()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 1))
@@ -923,18 +923,18 @@ func TestSpecifyIndex(t *testing.T) {
 	_, _ = dORM.Insert(index)
 	throwFailNow(t, AssertIs(index.Id, 2))
 
-	_ = dORM.QueryTable(&Index{}).Filter(`f1`, `1`).ForceIndex(`index_f1`).One(index)
+	_ = dORM.queryTable(&Index{}).Filter(`f1`, `1`).ForceIndex(`index_f1`).One(index)
 	throwFailNow(t, AssertIs(index.F2, 2))
 
-	_ = dORM.QueryTable(&Index{}).Filter(`f2`, `4`).UseIndex(`index_f2`).One(index)
+	_ = dORM.queryTable(&Index{}).Filter(`f2`, `4`).UseIndex(`index_f2`).One(index)
 	throwFailNow(t, AssertIs(index.F1, 3))
 
-	_ = dORM.QueryTable(&Index{}).Filter(`f1`, `1`).IgnoreIndex(`index_f1`, `index_f2`).One(index)
+	_ = dORM.queryTable(&Index{}).Filter(`f1`, `1`).IgnoreIndex(`index_f1`, `index_f2`).One(index)
 	throwFailNow(t, AssertIs(index.F2, 2))
 }
 
 func TestOperators(t *testing.T) {
-	qs := dORM.QueryTable("user")
+	qs := dORM.queryTable("user")
 	num, err := qs.Filter("user_name", "slene").Count()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 1))
@@ -1080,7 +1080,7 @@ func TestSetCond(t *testing.T) {
 	cond := NewCondition()
 	cond1 := cond.And("profile__isnull", false).AndNot("status__in", 1).Or("profile__age__gt", 2000)
 
-	qs := dORM.QueryTable("user")
+	qs := dORM.queryTable("user")
 	num, err := qs.SetCond(cond1).Count()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 1))
@@ -1108,7 +1108,7 @@ func TestSetCond(t *testing.T) {
 
 func TestLimit(t *testing.T) {
 	var posts []*Post
-	qs := dORM.QueryTable("post")
+	qs := dORM.queryTable("post")
 	num, err := qs.Limit(1).All(&posts)
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 1))
@@ -1128,7 +1128,7 @@ func TestLimit(t *testing.T) {
 
 func TestOffset(t *testing.T) {
 	var posts []*Post
-	qs := dORM.QueryTable("post")
+	qs := dORM.queryTable("post")
 	num, err := qs.Limit(1).Offset(2).All(&posts)
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 1))
@@ -1142,7 +1142,7 @@ func TestCountOrderBy(t *testing.T) {
 	if IsPostgres {
 		return
 	}
-	qs := dORM.QueryTable("user")
+	qs := dORM.queryTable("user")
 	num, err := qs.OrderBy("-status").Filter("user_name", "nobody").Count()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 1))
@@ -1178,7 +1178,7 @@ func TestCountOrderBy(t *testing.T) {
 
 func TestOrderBy(t *testing.T) {
 	var users []*User
-	qs := dORM.QueryTable("user")
+	qs := dORM.queryTable("user")
 	num, err := qs.OrderBy("-status").Filter("user_name", "nobody").All(&users)
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 1))
@@ -1213,7 +1213,7 @@ func TestOrderBy(t *testing.T) {
 }
 
 func TestCount(t *testing.T) {
-	qs := dORM.QueryTable("user")
+	qs := dORM.queryTable("user")
 	num, err := qs.Filter("user_name", "nobody").Count()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 1))
@@ -1233,7 +1233,7 @@ func TestCount(t *testing.T) {
 
 func TestAll(t *testing.T) {
 	var users []*User
-	qs := dORM.QueryTable("user")
+	qs := dORM.queryTable("user")
 	num, err := qs.OrderBy("Id").All(&users)
 	throwFail(t, err)
 	throwFailNow(t, AssertIs(num, 3))
@@ -1243,7 +1243,7 @@ func TestAll(t *testing.T) {
 	throwFail(t, AssertIs(users[2].UserName, "nobody"))
 
 	var users2 []User
-	qs = dORM.QueryTable("user")
+	qs = dORM.queryTable("user")
 	num, err = qs.OrderBy("Id").All(&users2)
 	throwFail(t, err)
 	throwFailNow(t, AssertIs(num, 3))
@@ -1252,7 +1252,7 @@ func TestAll(t *testing.T) {
 	throwFailNow(t, AssertIs(users2[1].UserName, "astaxie"))
 	throwFailNow(t, AssertIs(users2[2].UserName, "nobody"))
 
-	qs = dORM.QueryTable("user")
+	qs = dORM.queryTable("user")
 	num, err = qs.OrderBy("Id").RelatedSel().All(&users2, "UserName")
 	throwFail(t, err)
 	throwFailNow(t, AssertIs(num, 3))
@@ -1267,13 +1267,13 @@ func TestAll(t *testing.T) {
 	throwFailNow(t, AssertIs(users2[1].Profile == nil, false))
 	throwFailNow(t, AssertIs(users2[2].Profile == nil, true))
 
-	qs = dORM.QueryTable("user")
+	qs = dORM.queryTable("user")
 	num, err = qs.Filter("user_name", "nothing").All(&users)
 	throwFailNow(t, err)
 	throwFailNow(t, AssertIs(num, 0))
 
 	var users3 []*User
-	qs = dORM.QueryTable("user")
+	qs = dORM.queryTable("user")
 	num, err = qs.Filter("user_name", "nothing").All(&users3)
 	throwFailNow(t, err)
 	throwFailNow(t, AssertIs(num, 0))
@@ -1282,7 +1282,7 @@ func TestAll(t *testing.T) {
 
 func TestOne(t *testing.T) {
 	var user User
-	qs := dORM.QueryTable("user")
+	qs := dORM.queryTable("user")
 	err := qs.One(&user)
 	throwFail(t, err)
 
@@ -1304,7 +1304,7 @@ func TestOne(t *testing.T) {
 
 func TestValues(t *testing.T) {
 	var maps []Params
-	qs := dORM.QueryTable("user")
+	qs := dORM.queryTable("user")
 
 	num, err := qs.OrderBy("Id").Values(&maps)
 	throwFail(t, err)
@@ -1343,7 +1343,7 @@ func TestValues(t *testing.T) {
 
 func TestValuesList(t *testing.T) {
 	var list []ParamsList
-	qs := dORM.QueryTable("user")
+	qs := dORM.queryTable("user")
 
 	num, err := qs.OrderBy("Id").ValuesList(&list)
 	throwFail(t, err)
@@ -1365,7 +1365,7 @@ func TestValuesList(t *testing.T) {
 
 func TestValuesFlat(t *testing.T) {
 	var list ParamsList
-	qs := dORM.QueryTable("user")
+	qs := dORM.queryTable("user")
 
 	num, err := qs.OrderBy("id").ValuesFlat(&list, "UserName")
 	throwFail(t, err)
@@ -1382,7 +1382,7 @@ func TestRelatedSel(t *testing.T) {
 		// Skip it. TiDB does not support relation now.
 		return
 	}
-	qs := dORM.QueryTable("user")
+	qs := dORM.queryTable("user")
 	num, err := qs.Filter("profile__age", 28).Count()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 1))
@@ -1417,13 +1417,13 @@ func TestRelatedSel(t *testing.T) {
 	throwFail(t, AssertIs(num, 1))
 	throwFail(t, AssertIs(user.Profile, nil))
 
-	qs = dORM.QueryTable("user_profile")
+	qs = dORM.queryTable("user_profile")
 	num, err = qs.Filter("user__username", "slene").Count()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 1))
 
 	var posts []*Post
-	qs = dORM.QueryTable("post")
+	qs = dORM.queryTable("post")
 	num, err = qs.RelatedSel().All(&posts)
 	throwFail(t, err)
 	throwFailNow(t, AssertIs(num, 4))
@@ -1436,46 +1436,46 @@ func TestRelatedSel(t *testing.T) {
 
 func TestReverseQuery(t *testing.T) {
 	var profile Profile
-	err := dORM.QueryTable("user_profile").Filter("User", 3).One(&profile)
+	err := dORM.queryTable("user_profile").Filter("User", 3).One(&profile)
 	throwFailNow(t, err)
 	throwFailNow(t, AssertIs(profile.Age, 30))
 
 	profile = Profile{}
-	err = dORM.QueryTable("user_profile").Filter("User__UserName", "astaxie").One(&profile)
+	err = dORM.queryTable("user_profile").Filter("User__UserName", "astaxie").One(&profile)
 	throwFailNow(t, err)
 	throwFailNow(t, AssertIs(profile.Age, 30))
 
 	var user User
-	err = dORM.QueryTable("user").Filter("Posts__Title", "Examples").One(&user)
+	err = dORM.queryTable("user").Filter("Posts__Title", "Examples").One(&user)
 	throwFailNow(t, err)
 	throwFailNow(t, AssertIs(user.UserName, "astaxie"))
 
 	user = User{}
-	err = dORM.QueryTable("user").Filter("Posts__User__UserName", "astaxie").Limit(1).One(&user)
+	err = dORM.queryTable("user").Filter("Posts__User__UserName", "astaxie").Limit(1).One(&user)
 	throwFailNow(t, err)
 	throwFailNow(t, AssertIs(user.UserName, "astaxie"))
 
 	user = User{}
-	err = dORM.QueryTable("user").Filter("Posts__User__UserName", "astaxie").RelatedSel().Limit(1).One(&user)
+	err = dORM.queryTable("user").Filter("Posts__User__UserName", "astaxie").RelatedSel().Limit(1).One(&user)
 	throwFailNow(t, err)
 	throwFailNow(t, AssertIs(user.UserName, "astaxie"))
 	throwFailNow(t, AssertIs(user.Profile == nil, false))
 	throwFailNow(t, AssertIs(user.Profile.Age, 30))
 
 	var posts []*Post
-	num, err := dORM.QueryTable("post").Filter("Tags__Tag__Name", "golang").All(&posts)
+	num, err := dORM.queryTable("post").Filter("Tags__Tag__Name", "golang").All(&posts)
 	throwFailNow(t, err)
 	throwFailNow(t, AssertIs(num, 3))
 	throwFailNow(t, AssertIs(posts[0].Title, "Introduction"))
 
 	posts = []*Post{}
-	num, err = dORM.QueryTable("post").Filter("Tags__Tag__Name", "golang").Filter("User__UserName", "slene").All(&posts)
+	num, err = dORM.queryTable("post").Filter("Tags__Tag__Name", "golang").Filter("User__UserName", "slene").All(&posts)
 	throwFailNow(t, err)
 	throwFailNow(t, AssertIs(num, 1))
 	throwFailNow(t, AssertIs(posts[0].Title, "Introduction"))
 
 	posts = []*Post{}
-	num, err = dORM.QueryTable("post").Filter("Tags__Tag__Name", "golang").
+	num, err = dORM.queryTable("post").Filter("Tags__Tag__Name", "golang").
 		Filter("User__UserName", "slene").RelatedSel().All(&posts)
 	throwFailNow(t, err)
 	throwFailNow(t, AssertIs(num, 1))
@@ -1483,20 +1483,20 @@ func TestReverseQuery(t *testing.T) {
 	throwFailNow(t, AssertIs(posts[0].User.UserName, "slene"))
 
 	var tags []*Tag
-	num, err = dORM.QueryTable("tag").Filter("Posts__Post__Title", "Introduction").All(&tags)
+	num, err = dORM.queryTable("tag").Filter("Posts__Post__Title", "Introduction").All(&tags)
 	throwFailNow(t, err)
 	throwFailNow(t, AssertIs(num, 1))
 	throwFailNow(t, AssertIs(tags[0].Name, "golang"))
 
 	tags = []*Tag{}
-	num, err = dORM.QueryTable("tag").Filter("Posts__Post__Title", "Introduction").
+	num, err = dORM.queryTable("tag").Filter("Posts__Post__Title", "Introduction").
 		Filter("BestPost__User__UserName", "astaxie").All(&tags)
 	throwFailNow(t, err)
 	throwFailNow(t, AssertIs(num, 1))
 	throwFailNow(t, AssertIs(tags[0].Name, "golang"))
 
 	tags = []*Tag{}
-	num, err = dORM.QueryTable("tag").Filter("Posts__Post__Title", "Introduction").
+	num, err = dORM.queryTable("tag").Filter("Posts__Post__Title", "Introduction").
 		Filter("BestPost__User__UserName", "astaxie").RelatedSel().All(&tags)
 	throwFailNow(t, err)
 	throwFailNow(t, AssertIs(num, 1))
@@ -1798,7 +1798,7 @@ func TestQueryRelate(_ *testing.T) {
 	// throwFailNow(t, AssertIs(num, 2))
 	// throwFailNow(t, AssertIs(tags[0].Name, "golang"))
 
-	// num, err = dORM.QueryTable("Tag").Filter("Posts__Post", 2).Count()
+	// num, err = dORM.queryTable("Tag").Filter("Posts__Post", 2).Count()
 	// throwFailNow(t, err)
 	// throwFailNow(t, AssertIs(num, 2))
 }
@@ -1809,14 +1809,14 @@ func TestPkManyRelated(t *testing.T) {
 	throwFailNow(t, err)
 
 	var groups []*Group
-	qs := dORM.QueryTable("Group")
+	qs := dORM.queryTable("Group")
 	num, err := qs.Filter("Permissions__Permission", permission.ID).All(&groups)
 	throwFailNow(t, err)
 	throwFailNow(t, AssertIs(num, 2))
 }
 
 func TestPrepareInsert(t *testing.T) {
-	qs := dORM.QueryTable("user")
+	qs := dORM.queryTable("user")
 	i, err := qs.PrepareInsert()
 	throwFailNow(t, err)
 
@@ -2198,7 +2198,7 @@ func TestRawPrepare(t *testing.T) {
 }
 
 func TestUpdate(t *testing.T) {
-	qs := dORM.QueryTable("user")
+	qs := dORM.queryTable("user")
 	num, err := qs.Filter("user_name", "slene").Filter("is_staff", false).Update(Params{
 		"is_staff":  true,
 		"is_active": true,
@@ -2244,37 +2244,37 @@ func TestUpdate(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	qs := dORM.QueryTable("user_profile")
+	qs := dORM.queryTable("user_profile")
 	num, err := qs.Filter("user__user_name", "slene").Delete()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 1))
 
-	qs = dORM.QueryTable("user")
+	qs = dORM.queryTable("user")
 	num, err = qs.Filter("user_name", "slene").Filter("profile__isnull", true).Count()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 1))
 
-	qs = dORM.QueryTable("comment")
+	qs = dORM.queryTable("comment")
 	num, err = qs.Count()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 6))
 
-	qs = dORM.QueryTable("post")
+	qs = dORM.queryTable("post")
 	num, err = qs.Filter("Id", 3).Delete()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 1))
 
-	qs = dORM.QueryTable("comment")
+	qs = dORM.queryTable("comment")
 	num, err = qs.Count()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 4))
 
-	qs = dORM.QueryTable("comment")
+	qs = dORM.queryTable("comment")
 	num, err = qs.Filter("Post__User", 3).Delete()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 3))
 
-	qs = dORM.QueryTable("comment")
+	qs = dORM.queryTable("comment")
 	num, err = qs.Count()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 1))
@@ -2282,51 +2282,49 @@ func TestDelete(t *testing.T) {
 
 func TestTransaction(t *testing.T) {
 	// this test worked when database support transaction
-
 	o := NewOrm()
-	to, err := o.Begin()
-	throwFail(t, err)
-
 	names := []string{"1", "2", "3"}
+	rollbackErr := fmt.Errorf("rollback sentinel")
 
-	var tag Tag
-	tag.Name = names[0]
-	id, err := to.Insert(&tag)
-	throwFail(t, err)
-	throwFail(t, AssertIs(id > 0, true))
-
-	num, err := to.QueryTable("tag").Filter("name", "golang").Update(Params{"name": names[1]})
-	throwFail(t, err)
-	throwFail(t, AssertIs(num, 1))
-
-	if IsMysql || IsSqlite {
-		res, err := to.Raw("INSERT INTO tag (name) VALUES (?)", names[2]).Exec()
+	err := o.DoTx(func(ctx context.Context, txOrm TxOrmer) error {
+		var tag Tag
+		tag.Name = names[0]
+		id, err := txOrm.Insert(&tag)
 		throwFail(t, err)
-		if err == nil {
-			id, err = res.LastInsertId()
-			throwFail(t, err)
-			throwFail(t, AssertIs(id > 0, true))
-		}
-	}
+		throwFail(t, AssertIs(id > 0, true))
 
-	err = to.Rollback()
-	assert.Nil(t, err)
-	num, err = o.QueryTable("tag").Filter("name__in", names).Count()
+		num, err := txOrm.queryTable("tag").Filter("name", "golang").Update(Params{"name": names[1]})
+		throwFail(t, err)
+		throwFail(t, AssertIs(num, 1))
+
+		if IsMysql || IsSqlite {
+			res, err := txOrm.Raw("INSERT INTO tag (name) VALUES (?)", names[2]).Exec()
+			throwFail(t, err)
+			if err == nil {
+				id, err = res.LastInsertId()
+				throwFail(t, err)
+				throwFail(t, AssertIs(id > 0, true))
+			}
+		}
+		return rollbackErr
+	})
+	assert.Equal(t, rollbackErr, err)
+
+	num, err := o.queryTable("tag").Filter("name__in", names).Count()
 	assert.Nil(t, err)
 	assert.Equal(t, int64(0), num)
 
-	to, err = o.Begin()
+	err = o.DoTx(func(ctx context.Context, txOrm TxOrmer) error {
+		var tag Tag
+		tag.Name = "commit"
+		id, err := txOrm.Insert(&tag)
+		assert.Nil(t, err)
+		assert.True(t, id > 0)
+		return nil
+	})
 	assert.Nil(t, err)
 
-	tag.Name = "commit"
-	id, err = to.Insert(&tag)
-	assert.Nil(t, err)
-	assert.True(t, id > 0)
-
-	err = to.Commit()
-	assert.Nil(t, err)
-
-	num, err = o.QueryTable("tag").Filter("name", "commit").Delete()
+	num, err = o.queryTable("tag").Filter("name", "commit").Delete()
 	assert.Nil(t, err)
 	assert.Equal(t, int64(1), num)
 }
@@ -2335,35 +2333,34 @@ func TestTxOrmRollbackUnlessCommit(t *testing.T) {
 	o := NewOrm()
 	var tag Tag
 
-	// test not committed and call RollbackUnlessCommit
-	to, err := o.Begin()
+	// test not committed and call rollbackUnlessCommit
+	to, err := o.(txStarter).beginWithCtxAndOpts(context.Background(), nil)
 	assert.Nil(t, err)
 	tag.Name = "rollback unless commit"
 	rows, err := to.Insert(&tag)
 	assert.Nil(t, err)
 	assert.True(t, rows > 0)
-	err = to.RollbackUnlessCommit()
+	err = to.rollbackUnlessCommit()
 	assert.Nil(t, err)
-	num, err := o.QueryTable("tag").Filter("name", tag.Name).Delete()
+	num, err := o.queryTable("tag").Filter("name", tag.Name).Delete()
 	assert.Nil(t, err)
 	assert.Equal(t, int64(0), num)
 
-	// test commit and call RollbackUnlessCommit
-
-	to, err = o.Begin()
+	// test commit and call rollbackUnlessCommit
+	to, err = o.(txStarter).beginWithCtxAndOpts(context.Background(), nil)
 	assert.Nil(t, err)
 	tag.Name = "rollback unless commit"
 	rows, err = to.Insert(&tag)
 	assert.Nil(t, err)
 	assert.True(t, rows > 0)
 
-	err = to.Commit()
+	err = to.commit()
 	assert.Nil(t, err)
 
-	err = to.RollbackUnlessCommit()
+	err = to.rollbackUnlessCommit()
 	assert.Nil(t, err)
 
-	num, err = o.QueryTable("tag").Filter("name", tag.Name).Delete()
+	num, err = o.queryTable("tag").Filter("name", tag.Name).Delete()
 	assert.Nil(t, err)
 	assert.Equal(t, int64(1), num)
 }
@@ -2378,9 +2375,9 @@ func TestTransactionIsolationLevel(t *testing.T) {
 	o2 := NewOrm()
 
 	// start two transaction with isolation level repeatable read
-	to1, err := o1.BeginWithCtxAndOpts(context.Background(), &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+	to1, err := o1.(txStarter).beginWithCtxAndOpts(context.Background(), &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	throwFail(t, err)
-	to2, err := o2.BeginWithCtxAndOpts(context.Background(), &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
+	to2, err := o2.(txStarter).beginWithCtxAndOpts(context.Background(), &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 	throwFail(t, err)
 
 	// o1 insert tag
@@ -2391,25 +2388,25 @@ func TestTransactionIsolationLevel(t *testing.T) {
 	throwFail(t, AssertIs(id > 0, true))
 
 	// o2 query tag table, no result
-	num, err := to2.QueryTable("tag").Filter("name", "test-transaction").Count()
+	num, err := to2.queryTable("tag").Filter("name", "test-transaction").Count()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 0))
 
 	// o1 commit
-	to1.Commit()
+	_ = to1.commit()
 
 	// o2 query tag table, still no result
-	num, err = to2.QueryTable("tag").Filter("name", "test-transaction").Count()
+	num, err = to2.queryTable("tag").Filter("name", "test-transaction").Count()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 0))
 
 	// o2 commit and query tag table, Get the result
-	to2.Commit()
-	num, err = o2.QueryTable("tag").Filter("name", "test-transaction").Count()
+	_ = to2.commit()
+	num, err = o2.queryTable("tag").Filter("name", "test-transaction").Count()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 1))
 
-	num, err = o1.QueryTable("tag").Filter("name", "test-transaction").Delete()
+	num, err = o1.queryTable("tag").Filter("name", "test-transaction").Delete()
 	throwFail(t, err)
 	throwFail(t, AssertIs(num, 1))
 }
@@ -2417,14 +2414,14 @@ func TestTransactionIsolationLevel(t *testing.T) {
 func TestBeginTxWithContextCanceled(t *testing.T) {
 	o := NewOrm()
 	ctx, cancel := context.WithCancel(context.Background())
-	to, _ := o.BeginWithCtx(ctx)
+	to, _ := o.(txStarter).beginWithCtxAndOpts(ctx, nil)
 	id, err := to.Insert(&Tag{Name: "test-context"})
 	throwFail(t, err)
 	throwFail(t, AssertIs(id > 0, true))
 
 	// cancel the context before commit to make it error
 	cancel()
-	err = to.Commit()
+	err = to.commit()
 	throwFail(t, AssertIs(err, context.Canceled))
 }
 
@@ -2511,7 +2508,7 @@ func TestInLineOneToOne(t *testing.T) {
 	throwFail(t, AssertIs(il121.ID, 1))
 
 	il := NewInLineOneToOne()
-	err = dORM.QueryTable(il).Filter("Id", 1).RelatedSel().One(il)
+	err = dORM.queryTable(il).Filter("Id", 1).RelatedSel().One(il)
 
 	throwFail(t, err)
 	throwFail(t, AssertIs(il.Note, note))
@@ -2520,7 +2517,7 @@ func TestInLineOneToOne(t *testing.T) {
 	throwFail(t, AssertIs(il.InLine.Email, email))
 
 	rinline := NewInLine()
-	err = dORM.QueryTable(rinline).Filter("InLineOneToOne__Id", 1).One(rinline)
+	err = dORM.queryTable(rinline).Filter("InLineOneToOne__Id", 1).One(rinline)
 
 	throwFail(t, err)
 	throwFail(t, AssertIs(rinline.ID, id))
@@ -2817,7 +2814,7 @@ func TestStrPkInsert(t *testing.T) {
 	}
 
 	var vForTesting StrPk
-	err = dORM.QueryTable(new(StrPk)).Filter(`id`, pk).One(&vForTesting)
+	err = dORM.queryTable(new(StrPk)).Filter(`id`, pk).One(&vForTesting)
 	throwFailNow(t, AssertIs(err, nil))
 	throwFailNow(t, AssertIs(vForTesting.Value, value))
 
@@ -2839,7 +2836,7 @@ func TestStrPkInsert(t *testing.T) {
 		}
 	} else {
 		var vForTesting2 StrPk
-		err = dORM.QueryTable(new(StrPk)).Filter(`id`, pk).One(&vForTesting2)
+		err = dORM.queryTable(new(StrPk)).Filter(`id`, pk).One(&vForTesting2)
 		throwFailNow(t, AssertIs(err, nil))
 		throwFailNow(t, AssertIs(vForTesting2.Value, value2))
 	}
@@ -2940,7 +2937,7 @@ func TestContextCanceled(t *testing.T) {
 	ctx, cancel = context.WithCancel(context.Background())
 	cancel()
 
-	qs := dORM.QueryTable(user)
+	qs := dORM.queryTable(user)
 	_, err = qs.Filter("UserName", "slene").CountWithCtx(ctx)
 	throwFail(t, AssertIs(err, context.Canceled))
 }
@@ -2949,7 +2946,7 @@ func TestDebugLog(t *testing.T) {
 	txCommitFn := func() {
 		o := NewOrm()
 		o.DoTx(func(ctx context.Context, txOrm TxOrmer) (txerr error) {
-			_, txerr = txOrm.QueryTable(&User{}).Count()
+			_, txerr = txOrm.queryTable(&User{}).Count()
 			return
 		})
 	}

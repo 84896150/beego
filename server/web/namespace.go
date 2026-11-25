@@ -106,20 +106,6 @@ func (n *Namespace) Router(rootpath string, c ControllerInterface, mappingMethod
 	return n
 }
 
-// AutoRouter same as beego.AutoRouter
-// refer: https://godoc.org/github.com/beego/beego/v2#AutoRouter
-func (n *Namespace) AutoRouter(c ControllerInterface) *Namespace {
-	n.handlers.AddAuto(c)
-	return n
-}
-
-// AutoPrefix same as beego.AutoPrefix
-// refer: https://godoc.org/github.com/beego/beego/v2#AutoPrefix
-func (n *Namespace) AutoPrefix(prefix string, c ControllerInterface) *Namespace {
-	n.handlers.AddAutoPrefix(prefix, c)
-	return n
-}
-
 // Get same as beego.Get
 // refer: https://godoc.org/github.com/beego/beego/v2#Get
 func (n *Namespace) Get(rootpath string, f HandleFunc) *Namespace {
@@ -180,13 +166,6 @@ func (n *Namespace) Any(rootpath string, f HandleFunc) *Namespace {
 // refer: https://godoc.org/github.com/beego/beego/v2#Handler
 func (n *Namespace) Handler(rootpath string, h http.Handler) *Namespace {
 	n.handlers.Handler(rootpath, h)
-	return n
-}
-
-// Include add include class
-// refer: https://godoc.org/github.com/beego/beego/v2#Include
-func (n *Namespace) Include(cList ...ControllerInterface) *Namespace {
-	n.handlers.Include(cList...)
 	return n
 }
 
@@ -349,13 +328,6 @@ func NSAfter(filterList ...FilterFunc) LinkNamespace {
 	}
 }
 
-// NSInclude Namespace Include ControllerInterface
-func NSInclude(cList ...ControllerInterface) LinkNamespace {
-	return func(ns *Namespace) {
-		ns.Include(cList...)
-	}
-}
-
 // NSRouter call Namespace Router
 func NSRouter(rootpath string, c ControllerInterface, mappingMethods ...string) LinkNamespace {
 	return func(ns *Namespace) {
@@ -472,20 +444,6 @@ func NSCtrlOptions(rootpath string, f interface{}) LinkNamespace {
 func NSCtrlPatch(rootpath string, f interface{}) LinkNamespace {
 	return func(ns *Namespace) {
 		ns.CtrlPatch(rootpath, f)
-	}
-}
-
-// NSAutoRouter call Namespace AutoRouter
-func NSAutoRouter(c ControllerInterface) LinkNamespace {
-	return func(ns *Namespace) {
-		ns.AutoRouter(c)
-	}
-}
-
-// NSAutoPrefix call Namespace AutoPrefix
-func NSAutoPrefix(prefix string, c ControllerInterface) LinkNamespace {
-	return func(ns *Namespace) {
-		ns.AutoPrefix(prefix, c)
 	}
 }
 

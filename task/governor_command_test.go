@@ -26,6 +26,7 @@ import (
 type countTask struct {
 	cnt     int
 	mockErr error
+	prev    time.Time
 }
 
 func (c *countTask) GetSpec(ctx context.Context) string {
@@ -48,11 +49,12 @@ func (c *countTask) GetNext(ctx context.Context) time.Time {
 	return time.Now()
 }
 
-func (c *countTask) SetPrev(ctx context.Context, time time.Time) {
+func (c *countTask) SetPrev(ctx context.Context, t time.Time) {
+	c.prev = t
 }
 
 func (c *countTask) GetPrev(ctx context.Context) time.Time {
-	return time.Now()
+	return c.prev
 }
 
 func (c *countTask) GetTimeout(ctx context.Context) time.Duration {
@@ -83,6 +85,7 @@ func TestRunTaskCommand_Execute(t *testing.T) {
 	res = cmd.Execute("count")
 	assert.NotNil(t, res)
 	assert.True(t, res.IsSuccess())
+	assert.False(t, task.GetPrev(context.Background()).IsZero())
 
 	task.mockErr = errors.New("mock error")
 	res = cmd.Execute("count")

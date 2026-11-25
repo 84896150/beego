@@ -134,19 +134,6 @@ func TestUrlFor(t *testing.T) {
 	}
 }
 
-func TestUrlFor3(t *testing.T) {
-	handler := NewControllerRegister()
-	handler.AddAuto(&TestController{})
-	a := handler.URLFor("TestController.Myext")
-	if a != "/test/myext" && a != "/Test/Myext" {
-		t.Errorf("TestController.Myext must equal to /test/myext, but get %s", a)
-	}
-	a = handler.URLFor("TestController.GetURL")
-	if a != "/test/geturl" && a != "/Test/GetURL" {
-		t.Errorf("TestController.GetURL must equal to /test/geturl, but get %s", a)
-	}
-}
-
 func TestUrlFor2(t *testing.T) {
 	handler := NewControllerRegister()
 	handler.Add("/v1/:v/cms_:id(.+)_:page(.+).html", &TestController{}, WithRouterMethods(&TestController{}, "*:List"))
@@ -197,54 +184,6 @@ func TestPostFunc(t *testing.T) {
 	handler.ServeHTTP(w, r)
 	if w.Body.String() != "astaxie" {
 		t.Errorf("post func should astaxie")
-	}
-}
-
-func TestAutoFunc(t *testing.T) {
-	r, _ := http.NewRequest("GET", "/test/list", nil)
-	w := httptest.NewRecorder()
-
-	handler := NewControllerRegister()
-	handler.AddAuto(&TestController{})
-	handler.ServeHTTP(w, r)
-	if w.Body.String() != "i am list" {
-		t.Errorf("user define func can't run")
-	}
-}
-
-func TestAutoFunc2(t *testing.T) {
-	r, _ := http.NewRequest("GET", "/Test/List", nil)
-	w := httptest.NewRecorder()
-
-	handler := NewControllerRegister()
-	handler.AddAuto(&TestController{})
-	handler.ServeHTTP(w, r)
-	if w.Body.String() != "i am list" {
-		t.Errorf("user define func can't run")
-	}
-}
-
-func TestAutoFuncParams(t *testing.T) {
-	r, _ := http.NewRequest("GET", "/test/params/2009/11/12", nil)
-	w := httptest.NewRecorder()
-
-	handler := NewControllerRegister()
-	handler.AddAuto(&TestController{})
-	handler.ServeHTTP(w, r)
-	if w.Body.String() != "20091112" {
-		t.Errorf("user define func can't run")
-	}
-}
-
-func TestAutoExtFunc(t *testing.T) {
-	r, _ := http.NewRequest("GET", "/test/myext.json", nil)
-	w := httptest.NewRecorder()
-
-	handler := NewControllerRegister()
-	handler.AddAuto(&TestController{})
-	handler.ServeHTTP(w, r)
-	if w.Body.String() != "json" {
-		t.Errorf("user define func can't run")
 	}
 }
 
@@ -341,18 +280,6 @@ func TestPrepare(t *testing.T) {
 	handler.ServeHTTP(w, r)
 	if w.Body.String() != `"prepare"` {
 		t.Errorf("%s user define func can't run", w.Body.String())
-	}
-}
-
-func TestAutoPrefix(t *testing.T) {
-	r, _ := http.NewRequest("GET", "/admin/test/list", nil)
-	w := httptest.NewRecorder()
-
-	handler := NewControllerRegister()
-	handler.AddAutoPrefix("/admin", &TestController{})
-	handler.ServeHTTP(w, r)
-	if w.Body.String() != "i am list" {
-		t.Errorf("TestAutoPrefix can't run")
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"time"
 
 	"github.com/beego/beego/v2/core/admin"
 )
@@ -63,7 +64,10 @@ func (r *runTaskCommand) Execute(params ...interface{}) *admin.Result {
 	}
 
 	if t, ok := globalTaskManager.adminTaskList[tn]; ok {
-		err := t.Run(context.Background())
+		ctx := context.Background()
+		now := time.Now()
+		err := t.Run(ctx)
+		t.SetPrev(ctx, now)
 		if err != nil {
 			return &admin.Result{
 				Status: 500,
@@ -72,7 +76,7 @@ func (r *runTaskCommand) Execute(params ...interface{}) *admin.Result {
 		}
 		return &admin.Result{
 			Status:  200,
-			Content: t.GetStatus(context.Background()),
+			Content: t.GetStatus(ctx),
 		}
 	} else {
 		return &admin.Result{

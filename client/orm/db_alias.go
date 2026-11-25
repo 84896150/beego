@@ -418,20 +418,6 @@ func newAliasWithDb(aliasName, driverName string, db *sql.DB, params ...DBOption
 }
 
 // SetMaxIdleConns Change the max idle conns for *sql.DB, use specify database alias name
-// Deprecated you should not use this, we will remove it in the future
-func SetMaxIdleConns(aliasName string, maxIdleConns int) {
-	al := getDbAlias(aliasName)
-	al.SetMaxIdleConns(maxIdleConns)
-}
-
-// SetMaxOpenConns Change the max open conns for *sql.DB, use specify database alias name
-// Deprecated you should not use this, we will remove it in the future
-func SetMaxOpenConns(aliasName string, maxOpenConns int) {
-	al := getDbAlias(aliasName)
-	al.SetMaxOpenConns(maxOpenConns)
-}
-
-// SetMaxIdleConns Change the max idle conns for *sql.DB, use specify database alias name
 func (al *alias) SetMaxIdleConns(maxIdleConns int) {
 	al.MaxIdleConns = maxIdleConns
 	al.DB.DB.SetMaxIdleConns(maxIdleConns)

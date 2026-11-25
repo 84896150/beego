@@ -423,46 +423,6 @@ func findAndRemoveSingleTree(entryPointTree *Tree) {
 	}
 }
 
-// Include see HttpServer.Include
-func Include(cList ...ControllerInterface) *HttpServer {
-	return BeeApp.Include(cList...)
-}
-
-// Include will generate router file in the router/xxx.go from the controller's comments
-// usage:
-// beego.Include(&BankAccount{}, &OrderController{},&RefundController{},&ReceiptController{})
-//
-//	type BankAccount struct{
-//	  beego.Controller
-//	}
-//
-// register the function
-//
-//	func (b *BankAccount)Mapping(){
-//	 b.Mapping("ShowAccount" , b.ShowAccount)
-//	 b.Mapping("ModifyAccount", b.ModifyAccount)
-//	}
-//
-// //@router /account/:id  [get]
-//
-//	func (b *BankAccount) ShowAccount(){
-//	   //logic
-//	}
-//
-// //@router /account/:id  [post]
-//
-//	func (b *BankAccount) ModifyAccount(){
-//	   //logic
-//	}
-//
-// the comments @router url methodlist
-// url support all the function Router's pattern
-// methodlist [get post head put delete options *]
-func (app *HttpServer) Include(cList ...ControllerInterface) *HttpServer {
-	app.Handlers.Include(cList...)
-	return app
-}
-
 // RESTRouter see HttpServer.RESTRouter
 func RESTRouter(rootpath string, c ControllerInterface) *HttpServer {
 	return BeeApp.RESTRouter(rootpath, c)
@@ -474,34 +434,6 @@ func RESTRouter(rootpath string, c ControllerInterface) *HttpServer {
 func (app *HttpServer) RESTRouter(rootpath string, c ControllerInterface) *HttpServer {
 	app.Router(rootpath, c)
 	app.Router(path.Join(rootpath, ":objectId"), c)
-	return app
-}
-
-// AutoRouter see HttpServer.AutoRouter
-func AutoRouter(c ControllerInterface) *HttpServer {
-	return BeeApp.AutoRouter(c)
-}
-
-// AutoRouter adds defined controller handler to BeeApp.
-// it's same to HttpServer.AutoRouter.
-// if beego.AddAuto(&MainController{}) and MainController has methods List and Page,
-// visit the url /main/list to exec List function or /main/page to exec Page function.
-func (app *HttpServer) AutoRouter(c ControllerInterface) *HttpServer {
-	app.Handlers.AddAuto(c)
-	return app
-}
-
-// AutoPrefix see HttpServer.AutoPrefix
-func AutoPrefix(prefix string, c ControllerInterface) *HttpServer {
-	return BeeApp.AutoPrefix(prefix, c)
-}
-
-// AutoPrefix adds controller handler to BeeApp with prefix.
-// it's same to HttpServer.AutoRouterWithPrefix.
-// if beego.AutoPrefix("/admin",&MainController{}) and MainController has methods List and Page,
-// visit the url /admin/main/list to exec List function or /admin/main/page to exec Page function.
-func (app *HttpServer) AutoPrefix(prefix string, c ControllerInterface) *HttpServer {
-	app.Handlers.AddAutoPrefix(prefix, c)
 	return app
 }
 

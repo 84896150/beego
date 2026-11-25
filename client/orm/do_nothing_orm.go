@@ -65,17 +65,7 @@ func (d *DoNothingOrm) QueryM2M(md interface{}, name string) QueryM2Mer {
 	return nil
 }
 
-// NOTE: this method is deprecated, context parameter will not take effect.
-func (d *DoNothingOrm) QueryM2MWithCtx(ctx context.Context, md interface{}, name string) QueryM2Mer {
-	return nil
-}
-
-func (d *DoNothingOrm) QueryTable(ptrStructOrTableName interface{}) QuerySeter {
-	return nil
-}
-
-// NOTE: this method is deprecated, context parameter will not take effect.
-func (d *DoNothingOrm) QueryTableWithCtx(ctx context.Context, ptrStructOrTableName interface{}) QuerySeter {
+func (d *DoNothingOrm) queryTable(ptrStructOrTableName interface{}) QuerySeter {
 	return nil
 }
 
@@ -135,19 +125,7 @@ func (d *DoNothingOrm) Driver() Driver {
 	return nil
 }
 
-func (d *DoNothingOrm) Begin() (TxOrmer, error) {
-	return nil, nil
-}
-
-func (d *DoNothingOrm) BeginWithCtx(ctx context.Context) (TxOrmer, error) {
-	return nil, nil
-}
-
-func (d *DoNothingOrm) BeginWithOpts(opts *sql.TxOptions) (TxOrmer, error) {
-	return nil, nil
-}
-
-func (d *DoNothingOrm) BeginWithCtxAndOpts(ctx context.Context, opts *sql.TxOptions) (TxOrmer, error) {
+func (d *DoNothingOrm) beginWithCtxAndOpts(ctx context.Context, opts *sql.TxOptions) (TxOrmer, error) {
 	return nil, nil
 }
 
@@ -172,10 +150,14 @@ type DoNothingTxOrm struct {
 	DoNothingOrm
 }
 
-func (d *DoNothingTxOrm) Commit() error {
+func (d *DoNothingTxOrm) commit() error {
 	return nil
 }
 
-func (d *DoNothingTxOrm) Rollback() error {
+func (d *DoNothingTxOrm) rollback() error {
+	return nil
+}
+
+func (d *DoNothingTxOrm) rollbackUnlessCommit() error {
 	return nil
 }

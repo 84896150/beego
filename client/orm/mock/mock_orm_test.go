@@ -95,8 +95,9 @@ func TestMockQueryTableWithCtx(t *testing.T) {
 	mock := &DoNothingQuerySetter{}
 	s.Mock(MockQueryTableWithCtx((&User{}).TableName(), mock))
 	o := orm.NewOrm()
-	res := o.QueryTable(&User{})
-	assert.Equal(t, mock, res)
+	res, err := orm.Query[User](o).All()
+	assert.Nil(t, err)
+	assert.Empty(t, res)
 }
 
 func TestMockTable(t *testing.T) {
@@ -218,77 +219,44 @@ func TestTransactionClosure(t *testing.T) {
 	assert.Equal(t, "Tom", u.Name)
 }
 
-func TestTransactionManually(t *testing.T) {
-	s := StartMock()
-	defer s.Clear()
-	mock := errors.New(mockErrorMsg)
-	s.Mock(MockRead((&User{}).TableName(), func(data interface{}) {
-		u := data.(*User)
-		u.Name = "Tom"
-	}, mock))
-	u, err := originalTxManually()
-	assert.Equal(t, mock, err)
-	assert.Equal(t, "Tom", u.Name)
-}
-
 func TestTransactionRollback(t *testing.T) {
 	s := StartMock()
 	defer s.Clear()
-	mock := errors.New(mockErrorMsg)
-	s.Mock(MockRead((&User{}).TableName(), nil, errors.New("read error")))
-	s.Mock(MockRollback(mock))
-	_, err := originalTx()
-	assert.Equal(t, mock, err)
-}
+	readErr := errors.New("read error")
+	rollbackCalled := false
+	s.Mock(MockRead((&User{}).TableName(), nil, readErr))
+	s.Mock(NewMock(NewSimpleCondition("", "Rollback"), []interface{}{nil}, func(inv *orm.Invocation) {
+		rollbackCalled = true
+	}))
 
-func TestTransactionRollbackUnlessCommit(t *testing.T) {
-	s := StartMock()
-	defer s.Clear()
-	mock := errors.New(mockErrorMsg)
-	s.Mock(MockRollbackUnlessCommit(mock))
-
-	// u := &User{}
 	o := orm.NewOrm()
-	txOrm, _ := o.Begin()
-	err := txOrm.RollbackUnlessCommit()
-	assert.Equal(t, mock, err)
+	err := o.DoTx(func(ctx context.Context, txOrm orm.TxOrmer) error {
+		return txOrm.Read(&User{})
+	})
+	assert.Equal(t, readErr, err)
+	assert.True(t, rollbackCalled)
 }
 
 func TestTransactionCommit(t *testing.T) {
 	s := StartMock()
 	defer s.Clear()
-	mock := errors.New(mockErrorMsg)
+	commitCalled := false
 	s.Mock(MockRead((&User{}).TableName(), func(data interface{}) {
 		u := data.(*User)
 		u.Name = "Tom"
 	}, nil))
-	s.Mock(MockCommit(mock))
-	u, err := originalTx()
-	assert.Equal(t, mock, err)
+	s.Mock(NewMock(NewSimpleCondition("", "Commit"), []interface{}{nil}, func(inv *orm.Invocation) {
+		commitCalled = true
+	}))
+
+	o := orm.NewOrm()
+	u := &User{}
+	err := o.DoTx(func(ctx context.Context, txOrm orm.TxOrmer) error {
+		return txOrm.Read(u)
+	})
+	assert.Nil(t, err)
 	assert.Equal(t, "Tom", u.Name)
-}
-
-func originalTx() (*User, error) {
-	u := &User{}
-	o := orm.NewOrm()
-	txOrm, _ := o.Begin()
-	err := txOrm.Read(u)
-	if err == nil {
-		err = txOrm.Commit()
-		return u, err
-	} else {
-		err = txOrm.Rollback()
-		return nil, err
-	}
-}
-
-func originalTxManually() (*User, error) {
-	u := &User{}
-	o := orm.NewOrm()
-	txOrm, _ := o.Begin()
-	err := txOrm.Read(u)
-	_ = txOrm.Commit()
-	return u, err
+	assert.True(t, commitCalled)
 }
 
 func originalTxUsingClosure() (*User, error) {

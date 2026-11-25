@@ -313,12 +313,6 @@ func (o *ormBase) QueryM2M(md interface{}, name string) QueryM2Mer {
 	return newQueryM2M(md, o, mi, fi, ind)
 }
 
-// NOTE: this method is deprecated, context parameter will not take effect.
-func (o *ormBase) QueryM2MWithCtx(_ context.Context, md interface{}, name string) QueryM2Mer {
-	logs.Warn("QueryM2MWithCtx is DEPRECATED. Use methods with `WithCtx` suffix on QueryM2M as replacement please.")
-	return o.QueryM2M(md, name)
-}
-
 // load related models to md model.
 // args are limit, offset int and order string.
 //
@@ -471,8 +465,8 @@ func (o *ormBase) getRelQs(md interface{}, mi *models.ModelInfo, fi *models.Fiel
 
 // return a QuerySeter for table operations.
 // table name can be string or struct.
-// e.g. QueryTable("user"), QueryTable(&user{}) or QueryTable((*User)(nil)),
-func (o *ormBase) QueryTable(ptrStructOrTableName interface{}) (qs QuerySeter) {
+// e.g. queryTable("user"), queryTable(&user{}) or queryTable((*User)(nil)),
+func (o *ormBase) queryTable(ptrStructOrTableName interface{}) (qs QuerySeter) {
 	var name string
 	if table, ok := ptrStructOrTableName.(string); ok {
 		name = models.NameStrategyMap[models.DefaultNameStrategy](table)
@@ -489,12 +483,6 @@ func (o *ormBase) QueryTable(ptrStructOrTableName interface{}) (qs QuerySeter) {
 		panic(fmt.Errorf("<Ormer.QueryTable> table name: `%s` not exists", name))
 	}
 	return qs
-}
-
-// Deprecated: QueryTableWithCtx is deprecated, context parameter will not take effect.
-func (o *ormBase) QueryTableWithCtx(_ context.Context, ptrStructOrTableName interface{}) (qs QuerySeter) {
-	logs.Warn("QueryTableWithCtx is DEPRECATED. Use methods with `WithCtx` suffix on QuerySeter as replacement please.")
-	return o.QueryTable(ptrStructOrTableName)
 }
 
 // Raw return a raw query seter for raw sql string.
@@ -524,21 +512,13 @@ type orm struct {
 	ormBase
 }
 
-var _ Ormer = new(orm)
+var (
+	_ Ormer        = new(orm)
+	_ txStarter    = new(orm)
+	_ tableQuerier = new(ormBase)
+)
 
-func (o *orm) Begin() (TxOrmer, error) {
-	return o.BeginWithCtx(context.Background())
-}
-
-func (o *orm) BeginWithCtx(ctx context.Context) (TxOrmer, error) {
-	return o.BeginWithCtxAndOpts(ctx, nil)
-}
-
-func (o *orm) BeginWithOpts(opts *sql.TxOptions) (TxOrmer, error) {
-	return o.BeginWithCtxAndOpts(context.Background(), opts)
-}
-
-func (o *orm) BeginWithCtxAndOpts(ctx context.Context, opts *sql.TxOptions) (TxOrmer, error) {
+func (o *orm) beginWithCtxAndOpts(ctx context.Context, opts *sql.TxOptions) (TxOrmer, error) {
 	tx, err := o.db.(txer).BeginTx(ctx, opts)
 	if err != nil {
 		return nil, err
@@ -575,21 +555,21 @@ func (o *orm) DoTxWithCtxAndOpts(ctx context.Context, opts *sql.TxOptions, task 
 	return doTxTemplate(ctx, o, opts, task)
 }
 
-func doTxTemplate(ctx context.Context, o TxBeginner, opts *sql.TxOptions,
+func doTxTemplate(ctx context.Context, o txStarter, opts *sql.TxOptions,
 	task func(ctx context.Context, txOrm TxOrmer) error) error {
-	_txOrm, err := o.BeginWithCtxAndOpts(ctx, opts)
+	_txOrm, err := o.beginWithCtxAndOpts(ctx, opts)
 	if err != nil {
 		return err
 	}
 	panicked := true
 	defer func() {
 		if panicked || err != nil {
-			e := _txOrm.Rollback()
+			e := _txOrm.rollback()
 			if e != nil {
 				logs.Error("rollback transaction failed: %v,%v", e, panicked)
 			}
 		} else {
-			e := _txOrm.Commit()
+			e := _txOrm.commit()
 			if e != nil {
 				logs.Error("commit transaction failed: %v,%v", e, panicked)
 			}
@@ -607,15 +587,15 @@ type txOrm struct {
 
 var _ TxOrmer = new(txOrm)
 
-func (t *txOrm) Commit() error {
+func (t *txOrm) commit() error {
 	return t.db.(txEnder).Commit()
 }
 
-func (t *txOrm) Rollback() error {
+func (t *txOrm) rollback() error {
 	return t.db.(txEnder).Rollback()
 }
 
-func (t *txOrm) RollbackUnlessCommit() error {
+func (t *txOrm) rollbackUnlessCommit() error {
 	return t.db.(txEnder).RollbackUnlessCommit()
 }
 

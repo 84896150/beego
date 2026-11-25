@@ -114,6 +114,7 @@ type BeeLogger struct {
 	enableFuncCallDepth bool
 	enableFullFilePath  bool
 	asynchronous        bool
+	closed              bool
 	// Whether to discard logs when buffer is full and asynchronous is true
 	// No discard by default
 	logWithNonBlocking  bool
@@ -159,7 +160,7 @@ func NewLogger(channelLens ...int64) *BeeLogger {
 func (bl *BeeLogger) Async(msgLen ...int64) *BeeLogger {
 	bl.lock.Lock()
 	defer bl.lock.Unlock()
-	if bl.asynchronous {
+	if bl.closed || bl.asynchronous {
 		return bl
 	}
 	bl.asynchronous = true
@@ -285,11 +286,19 @@ func (bl *BeeLogger) Write(p []byte) (n int, err error) {
 }
 
 func (bl *BeeLogger) writeMsg(lm *LogMsg) error {
-	if !bl.init {
-		bl.lock.Lock()
-		bl.setLogger(AdapterConsole)
+	bl.lock.Lock()
+	if bl.closed {
 		bl.lock.Unlock()
+		return nil
 	}
+	if !bl.init {
+		bl.setLogger(AdapterConsole)
+	}
+	isAsync := bl.asynchronous
+	nonBlock := bl.logWithNonBlocking
+	hasOutputs := bl.outputs != nil
+	msgChan := bl.msgChan
+	bl.lock.Unlock()
 
 	var (
 		file string
@@ -315,7 +324,7 @@ func (bl *BeeLogger) writeMsg(lm *LogMsg) error {
 		lm.Level = LevelEmergency
 	}
 
-	if bl.asynchronous {
+	if isAsync {
 		logM := logMsgPool.Get().(*LogMsg)
 		logM.Level = lm.Level
 		logM.Msg = lm.Msg
@@ -325,15 +334,15 @@ func (bl *BeeLogger) writeMsg(lm *LogMsg) error {
 		logM.LineNumber = lm.LineNumber
 		logM.Prefix = lm.Prefix
 
-		if bl.outputs != nil {
-			if bl.logWithNonBlocking {
+		if hasOutputs {
+			if nonBlock {
 				select {
-				case bl.msgChan <- lm:
+				case msgChan <- lm:
 				// discard log when channel is full
 				default:
 				}
 			} else {
-				bl.msgChan <- lm
+				msgChan <- lm
 			}
 		} else {
 			logMsgPool.Put(lm)
@@ -591,7 +600,15 @@ func (bl *BeeLogger) Trace(format string, v ...interface{}) {
 
 // Flush flush all chan data.
 func (bl *BeeLogger) Flush() {
-	if bl.asynchronous {
+	bl.lock.Lock()
+	if bl.closed {
+		bl.lock.Unlock()
+		return
+	}
+	isAsync := bl.asynchronous
+	bl.lock.Unlock()
+
+	if isAsync {
 		bl.flushChan <- struct{}{}
 		bl.wg.Wait()
 		bl.wg.Add(1)
@@ -601,29 +618,53 @@ func (bl *BeeLogger) Flush() {
 }
 
 // Close close logger, flush all chan data and destroy all adapters in BeeLogger.
+// Safe and idempotent to call multiple times or after Reset.
 func (bl *BeeLogger) Close() {
-	if bl.asynchronous {
+	bl.lock.Lock()
+	if bl.closed {
+		bl.lock.Unlock()
+		return
+	}
+	bl.closed = true
+	wasAsync := bl.asynchronous
+	bl.asynchronous = false
+	bl.lock.Unlock()
+
+	if wasAsync {
 		bl.closeChan <- struct{}{}
 		bl.wg.Wait()
 		close(bl.msgChan)
 	} else {
 		bl.flush()
+		bl.lock.Lock()
 		for _, l := range bl.outputs {
 			l.Destroy()
 		}
 		bl.outputs = nil
+		bl.lock.Unlock()
 	}
 	close(bl.flushChan)
 	close(bl.closeChan)
 }
 
-// Reset close all outputs, and set bl.outputs to nil
+// Reset close all outputs, and set bl.outputs to nil.
+// Safe and idempotent to call multiple times or after Close.
 func (bl *BeeLogger) Reset() {
+	bl.lock.Lock()
+	if bl.closed {
+		bl.lock.Unlock()
+		return
+	}
+	bl.lock.Unlock()
+
 	bl.Flush()
+
+	bl.lock.Lock()
 	for _, l := range bl.outputs {
 		l.Destroy()
 	}
 	bl.outputs = nil
+	bl.lock.Unlock()
 }
 
 func (bl *BeeLogger) flush() {

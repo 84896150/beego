@@ -1,6 +1,6 @@
 module github.com/beego/beego/v2
 
-go 1.24.2
+go 1.27.3
 
 require (
 	github.com/beego/x2j v0.0.0-20131220205130-a0352aadc542

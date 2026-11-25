@@ -24,7 +24,6 @@ import (
 
 	"github.com/beego/beego/v2/client/orm/internal/models"
 
-	"github.com/beego/beego/v2/core/logs"
 	"github.com/beego/beego/v2/core/utils"
 )
 
@@ -33,14 +32,17 @@ const (
 )
 
 var (
-	_ Ormer   = new(filterOrmDecorator)
-	_ TxOrmer = new(filterOrmDecorator)
+	_ Ormer        = new(filterOrmDecorator)
+	_ TxOrmer      = new(filterOrmDecorator)
+	_ tableQuerier = new(filterOrmDecorator)
+	_ txStarter    = new(filterOrmDecorator)
 )
 
 type filterOrmDecorator struct {
 	ormer
 	TxBeginner
-	TxCommitter
+	txStarter
+	txCommitter
 
 	root Filter
 
@@ -50,9 +52,11 @@ type filterOrmDecorator struct {
 }
 
 func NewFilterOrmDecorator(delegate Ormer, filterChains ...FilterChain) Ormer {
+	starter, _ := delegate.(txStarter)
 	res := &filterOrmDecorator{
 		ormer:      delegate,
 		TxBeginner: delegate,
+		txStarter:  starter,
 		root: func(ctx context.Context, inv *Invocation) []interface{} {
 			return inv.execute(ctx)
 		},
@@ -68,7 +72,7 @@ func NewFilterOrmDecorator(delegate Ormer, filterChains ...FilterChain) Ormer {
 func NewFilterTxOrmDecorator(delegate TxOrmer, root Filter, txName string) TxOrmer {
 	res := &filterOrmDecorator{
 		ormer:       delegate,
-		TxCommitter: delegate,
+		txCommitter: delegate,
 		root:        root,
 		insideTx:    true,
 		txStartTime: time.Now(),
@@ -186,13 +190,7 @@ func (f *filterOrmDecorator) QueryM2M(md interface{}, name string) QueryM2Mer {
 	return res[0].(QueryM2Mer)
 }
 
-// NOTE: this method is deprecated, context parameter will not take effect.
-func (f *filterOrmDecorator) QueryM2MWithCtx(_ context.Context, md interface{}, name string) QueryM2Mer {
-	logs.Warn("QueryM2MWithCtx is DEPRECATED. Use methods with `WithCtx` on QueryM2Mer suffix as replacement.")
-	return f.QueryM2M(md, name)
-}
-
-func (f *filterOrmDecorator) QueryTable(ptrStructOrTableName interface{}) QuerySeter {
+func (f *filterOrmDecorator) queryTable(ptrStructOrTableName interface{}) QuerySeter {
 	var (
 		name string
 		md   interface{}
@@ -218,7 +216,7 @@ func (f *filterOrmDecorator) QueryTable(ptrStructOrTableName interface{}) QueryS
 		Md:          md,
 		mi:          mi,
 		f: func(c context.Context) []interface{} {
-			res := f.ormer.QueryTable(ptrStructOrTableName)
+			res := f.ormer.(tableQuerier).queryTable(ptrStructOrTableName)
 			return []interface{}{res}
 		},
 	}
@@ -228,12 +226,6 @@ func (f *filterOrmDecorator) QueryTable(ptrStructOrTableName interface{}) QueryS
 		return nil
 	}
 	return res[0].(QuerySeter)
-}
-
-// NOTE: this method is deprecated, context parameter will not take effect.
-func (f *filterOrmDecorator) QueryTableWithCtx(_ context.Context, ptrStructOrTableName interface{}) QuerySeter {
-	logs.Warn("QueryTableWithCtx is DEPRECATED. Use methods with `WithCtx`on QuerySeter suffix as replacement.")
-	return f.QueryTable(ptrStructOrTableName)
 }
 
 func (f *filterOrmDecorator) DBStats() *sql.DBStats {
@@ -418,26 +410,14 @@ func (f *filterOrmDecorator) Driver() Driver {
 	return res[0].(Driver)
 }
 
-func (f *filterOrmDecorator) Begin() (TxOrmer, error) {
-	return f.BeginWithCtxAndOpts(context.Background(), nil)
-}
-
-func (f *filterOrmDecorator) BeginWithCtx(ctx context.Context) (TxOrmer, error) {
-	return f.BeginWithCtxAndOpts(ctx, nil)
-}
-
-func (f *filterOrmDecorator) BeginWithOpts(opts *sql.TxOptions) (TxOrmer, error) {
-	return f.BeginWithCtxAndOpts(context.Background(), opts)
-}
-
-func (f *filterOrmDecorator) BeginWithCtxAndOpts(ctx context.Context, opts *sql.TxOptions) (TxOrmer, error) {
+func (f *filterOrmDecorator) beginWithCtxAndOpts(ctx context.Context, opts *sql.TxOptions) (TxOrmer, error) {
 	inv := &Invocation{
 		Method:      "BeginWithCtxAndOpts",
 		Args:        []interface{}{opts},
 		InsideTx:    f.insideTx,
 		TxStartTime: f.txStartTime,
 		f: func(c context.Context) []interface{} {
-			res, err := f.TxBeginner.BeginWithCtxAndOpts(c, opts)
+			res, err := f.txStarter.beginWithCtxAndOpts(c, opts)
 			res = NewFilterTxOrmDecorator(res, f.root, getTxNameFromCtx(c))
 			return []interface{}{res, err}
 		},
@@ -474,7 +454,7 @@ func (f *filterOrmDecorator) DoTxWithCtxAndOpts(ctx context.Context, opts *sql.T
 	return f.convertError(res[0])
 }
 
-func (f *filterOrmDecorator) Commit() error {
+func (f *filterOrmDecorator) commit() error {
 	inv := &Invocation{
 		Method:      "Commit",
 		Args:        []interface{}{},
@@ -482,7 +462,7 @@ func (f *filterOrmDecorator) Commit() error {
 		TxStartTime: f.txStartTime,
 		TxName:      f.txName,
 		f: func(c context.Context) []interface{} {
-			err := f.TxCommitter.Commit()
+			err := f.txCommitter.commit()
 			return []interface{}{err}
 		},
 	}
@@ -490,7 +470,7 @@ func (f *filterOrmDecorator) Commit() error {
 	return f.convertError(res[0])
 }
 
-func (f *filterOrmDecorator) Rollback() error {
+func (f *filterOrmDecorator) rollback() error {
 	inv := &Invocation{
 		Method:      "Rollback",
 		Args:        []interface{}{},
@@ -498,7 +478,7 @@ func (f *filterOrmDecorator) Rollback() error {
 		TxStartTime: f.txStartTime,
 		TxName:      f.txName,
 		f: func(c context.Context) []interface{} {
-			err := f.TxCommitter.Rollback()
+			err := f.txCommitter.rollback()
 			return []interface{}{err}
 		},
 	}
@@ -506,7 +486,7 @@ func (f *filterOrmDecorator) Rollback() error {
 	return f.convertError(res[0])
 }
 
-func (f *filterOrmDecorator) RollbackUnlessCommit() error {
+func (f *filterOrmDecorator) rollbackUnlessCommit() error {
 	inv := &Invocation{
 		Method:      "RollbackUnlessCommit",
 		Args:        []interface{}{},
@@ -514,7 +494,7 @@ func (f *filterOrmDecorator) RollbackUnlessCommit() error {
 		TxStartTime: f.txStartTime,
 		TxName:      f.txName,
 		f: func(c context.Context) []interface{} {
-			err := f.TxCommitter.RollbackUnlessCommit()
+			err := f.txCommitter.rollbackUnlessCommit()
 			return []interface{}{err}
 		},
 	}
